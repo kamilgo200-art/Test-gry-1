@@ -11,7 +11,11 @@ import {
   Flame,
   Zap,
   Gift,
-  Play
+  Play,
+  Cloud,
+  BarChart2,
+  MousePointerClick,
+  X
 } from 'lucide-react';
 
 type Item = {
@@ -58,28 +62,76 @@ const LOGS = [
 ];
 
 export default function App() {
+  const [isLoaded, setIsLoaded] = useState(false);
+
   const [coins, setCoins] = useState(0);
   const [scriptCost, setScriptCost] = useState(40);
   const [grid, setGrid] = useState<GridSlot[]>(Array(16).fill(null));
-  
+  const [upgrades, setUpgrades] = useState({
+    autoClicker: 0,
+    cryptoMiner: 0,
+    trollFarm: 0,
+    clickVirus: 0,
+  });
+  const [hasUsedFreeDrop, setHasUsedFreeDrop] = useState(false);
+  const [stats, setStats] = useState({ totalClicks: 0, maxLevel: 1 });
+  const [lastLoginDate, setLastLoginDate] = useState<string | null>(null);
+  const [loginStreak, setLoginStreak] = useState(0);
+
   const [mergedIndex, setMergedIndex] = useState<number | null>(null);
   const [boostTimeLeft, setBoostTimeLeft] = useState(0);
   const [dropTimer, setDropTimer] = useState(60);
   const [logText, setLogText] = useState(LOGS[0]);
   
-  const [upgrades, setUpgrades] = useState({
-    autoClicker: 0,
-    cryptoMiner: 0,
-    trollFarm: 0,
-  });
-
   const [toasts, setToasts] = useState<{id: number, msg: string}[]>([]);
   const toastIdCounter = useRef(0);
 
-  const [modalState, setModalState] = useState<{isOpen: boolean, type: 'normal' | 'epic', reward: number, isWatching: boolean} | null>(null);
+  const [modalState, setModalState] = useState<{isOpen: boolean, type: 'free' | 'ad', reward: number, isWatching: boolean} | null>(null);
+  const [showDailyModal, setShowDailyModal] = useState(false);
+  const [showStatsModal, setShowStatsModal] = useState(false);
 
   const [floatingTexts, setFloatingTexts] = useState<{id: number, text: string, x: number, y: number}[]>([]);
   const floatingIdCounter = useRef(0);
+
+  // Auto-Save: Load on mount
+  useEffect(() => {
+    const saved = localStorage.getItem('hackerMergeState');
+    if (saved) {
+      try {
+        const p = JSON.parse(saved);
+        if (p.coins !== undefined) setCoins(p.coins);
+        if (p.scriptCost !== undefined) setScriptCost(p.scriptCost);
+        if (p.grid !== undefined) setGrid(p.grid);
+        if (p.upgrades !== undefined) setUpgrades(prev => ({ ...prev, ...p.upgrades }));
+        if (p.hasUsedFreeDrop !== undefined) setHasUsedFreeDrop(p.hasUsedFreeDrop);
+        if (p.stats !== undefined) setStats(prev => ({ ...prev, ...p.stats }));
+        if (p.lastLoginDate !== undefined) setLastLoginDate(p.lastLoginDate);
+        if (p.loginStreak !== undefined) setLoginStreak(p.loginStreak);
+      } catch (e) {
+        console.error("Failed to parse save", e);
+      }
+    }
+    setIsLoaded(true);
+  }, []);
+
+  // Auto-Save: Save on change
+  useEffect(() => {
+    if (isLoaded) {
+      localStorage.setItem('hackerMergeState', JSON.stringify({
+        coins, scriptCost, grid, upgrades, hasUsedFreeDrop, stats, lastLoginDate, loginStreak
+      }));
+    }
+  }, [coins, scriptCost, grid, upgrades, hasUsedFreeDrop, stats, lastLoginDate, loginStreak, isLoaded]);
+
+  // Check Daily Login
+  useEffect(() => {
+    if (isLoaded) {
+      const today = new Date().toDateString();
+      if (lastLoginDate !== today) {
+        setShowDailyModal(true);
+      }
+    }
+  }, [isLoaded, lastLoginDate]);
 
   const addToast = (msg: string) => {
     const id = toastIdCounter.current++;
@@ -93,7 +145,7 @@ export default function App() {
   const passiveIncomeMultiplier = 1 + (upgrades.cryptoMiner * 1) + (upgrades.trollFarm * 4);
   const basePassiveIncome = gridIncome * passiveIncomeMultiplier;
   
-  const baseClickPower = 1 + Math.floor(0.01 * basePassiveIncome);
+  const baseClickPower = 1 + Math.floor(0.01 * basePassiveIncome) + (upgrades.clickVirus * 5);
   const autoClickerIncome = upgrades.autoClicker * Math.max(1, Math.floor(0.1 * baseClickPower));
   
   const baseTotalIncome = basePassiveIncome + autoClickerIncome;
@@ -106,6 +158,7 @@ export default function App() {
 
   const handleManualAttack = (e: React.MouseEvent) => {
     setCoins(prev => prev + finalClickPower);
+    setStats(prev => ({ ...prev, totalClicks: prev.totalClicks + 1 }));
     
     const id = floatingIdCounter.current++;
     const x = e.clientX + (Math.random() * 40 - 20);
@@ -126,13 +179,14 @@ export default function App() {
   };
 
   useEffect(() => {
+    if (!isLoaded) return;
     const interval = setInterval(() => {
       setCoins(prev => prev + finalTotalIncome);
       setBoostTimeLeft(prev => prev > 0 ? prev - 1 : 0);
       setDropTimer(prev => prev > 0 ? prev - 1 : 0);
     }, 1000);
     return () => clearInterval(interval);
-  }, [finalTotalIncome]);
+  }, [finalTotalIncome, isLoaded]);
 
   useEffect(() => {
     const interval = setInterval(() => {
@@ -151,6 +205,7 @@ export default function App() {
         const newGrid = [...grid];
         newGrid[emptyIndex] = { id: Math.random().toString(36).slice(2, 9), level: 1 };
         setGrid(newGrid);
+        setStats(prev => ({ ...prev, maxLevel: Math.max(prev.maxLevel, 1) }));
       }
     }
   };
@@ -179,6 +234,7 @@ export default function App() {
         setMergedIndex(targetIndex);
         setTimeout(() => setMergedIndex(null), 300);
         addToast("Połączono!");
+        setStats(prev => ({ ...prev, maxLevel: Math.max(prev.maxLevel, nextLevel) }));
       } else {
         newGrid[targetIndex] = sourceItem;
         newGrid[sourceIndex] = targetItem;
@@ -192,38 +248,77 @@ export default function App() {
   };
 
   const handleClaimDropClick = () => {
-    const isEpic = Math.random() < 0.4;
     const reward = Math.max(50, 100 * finalTotalIncome);
     setModalState({
       isOpen: true,
-      type: isEpic ? 'epic' : 'normal',
+      type: hasUsedFreeDrop ? 'ad' : 'free',
       reward,
       isWatching: false
     });
   };
 
-  const handleClaimModal = (multiplier: number) => {
+  const handleClaimModal = () => {
     if (modalState) {
-      if (multiplier > 1) {
+      if (modalState.type === 'ad') {
         setModalState({ ...modalState, isWatching: true });
-        addToast("Ładowanie połączenia z proxy...");
+        addToast("Ładowanie połączenia...");
         setTimeout(() => {
-          setCoins(prev => prev + modalState.reward * multiplier);
+          setCoins(prev => prev + modalState.reward * 10);
           setDropTimer(60);
           setModalState(null);
-          addToast(`Epicki Zrzut: +${formatNum(modalState.reward * multiplier)}!`);
+          addToast(`Epicki Zrzut: +${formatNum(modalState.reward * 10)}!`);
         }, 2000);
       } else {
+        setHasUsedFreeDrop(true);
         setCoins(prev => prev + modalState.reward);
         setDropTimer(60);
         setModalState(null);
-        addToast(`Zrzut Danych: +${formatNum(modalState.reward)}!`);
+        addToast(`Darmowy Zrzut: +${formatNum(modalState.reward)}!`);
       }
     }
   };
 
+  const handleClaimDaily = () => {
+    const today = new Date().toDateString();
+    let newStreak = loginStreak;
+    
+    if (lastLoginDate) {
+      const last = new Date(lastLoginDate);
+      const now = new Date(today);
+      const diff = now.getTime() - last.getTime();
+      const diffDays = Math.floor(diff / (1000 * 3600 * 24));
+      
+      if (diffDays === 1) {
+        newStreak++;
+      } else if (diffDays > 1) {
+        newStreak = 1;
+      }
+    } else {
+      newStreak = 1;
+    }
+
+    const nextDayNum = (newStreak - 1) % 7 + 1;
+    const reward = nextDayNum === 7 ? 7000 : nextDayNum * 100;
+    
+    setCoins(prev => prev + reward);
+    setLoginStreak(newStreak);
+    setLastLoginDate(today);
+    setShowDailyModal(false);
+    addToast(`Odebrano nagrodę: +${reward} B!`);
+  };
+
+  const handleResetDaily = () => {
+    setLastLoginDate(null);
+    setLoginStreak(0);
+    setShowDailyModal(true);
+  };
+
   const hasEmptySlot = grid.some(slot => slot === null);
   const canBuy = coins >= scriptCost && hasEmptySlot;
+  
+  if (!isLoaded) return null; // Avoid hydration mismatch
+
+  const currentDailyDay = (loginStreak % 7) + 1;
 
   return (
     <div className="h-[100dvh] w-full overflow-hidden bg-slate-950 bg-[radial-gradient(ellipse_at_top,_var(--tw-gradient-stops))] from-emerald-950/40 via-slate-950 to-black text-emerald-500 font-mono flex flex-col items-center p-1 sm:p-2 relative selection:bg-emerald-500 selection:text-black">
@@ -250,8 +345,17 @@ export default function App() {
         </div>
       ))}
 
-      {/* Toasts */}
-      <div className="absolute top-4 right-4 z-50 flex flex-col gap-2 pointer-events-none">
+      {/* Top Right UI: Cloud & Stats & Toasts */}
+      <div className="absolute top-4 right-4 z-[55] flex flex-col items-end gap-2 pointer-events-none">
+        <div className="flex gap-2 pointer-events-auto">
+          <button onClick={() => setShowStatsModal(true)} className="bg-black/60 backdrop-blur-md border border-emerald-500/50 text-emerald-400 p-2 rounded-xl shadow-[0_0_10px_rgba(16,185,129,0.2)] hover:bg-emerald-900/40 active:scale-95 transition-all">
+            <BarChart2 className="w-4 h-4" />
+          </button>
+          <div className="bg-black/60 backdrop-blur-md border border-emerald-500/50 text-emerald-400 p-2 rounded-xl shadow-[0_0_10px_rgba(16,185,129,0.2)] flex items-center gap-1">
+            <Cloud className="w-4 h-4 animate-pulse" />
+            <span className="text-[10px] uppercase font-bold hidden sm:inline">Auto-Save</span>
+          </div>
+        </div>
         {toasts.map(t => (
           <div key={t.id} className="bg-black/80 backdrop-blur-md border border-emerald-500/50 text-emerald-300 text-xs sm:text-sm px-3 py-1.5 rounded-xl shadow-[0_0_10px_rgba(16,185,129,0.3)] animate-bounce">
             {t.msg}
@@ -259,11 +363,78 @@ export default function App() {
         ))}
       </div>
 
-      {/* Ad Roulette Modal */}
+      {/* Daily Login Modal */}
+      {showDailyModal && (
+        <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/80 backdrop-blur-sm p-4">
+          <div className="w-full max-w-sm rounded-2xl border border-emerald-500/50 bg-slate-900/95 p-4 sm:p-6 flex flex-col items-center text-center shadow-[0_0_20px_rgba(16,185,129,0.2)]">
+            <h2 className="text-xl font-bold text-emerald-400 mb-2 uppercase tracking-widest shadow-emerald-500/50 drop-shadow-md">
+              Kalendarz Hakerski
+            </h2>
+            <p className="text-emerald-500/80 text-xs sm:text-sm mb-4">Odbierz swój codzienny przydział danych.</p>
+            
+            <div className="flex flex-wrap justify-center gap-2 mb-6">
+              {[1, 2, 3, 4, 5, 6, 7].map(day => {
+                const isCurrent = currentDailyDay === day;
+                const isPast = day < currentDailyDay;
+                return (
+                  <div key={day} className={`w-11 h-11 sm:w-12 sm:h-12 rounded-xl flex flex-col items-center justify-center border ${
+                    isCurrent ? 'border-emerald-400 bg-emerald-900/50 animate-pulse text-emerald-300 shadow-[0_0_10px_rgba(16,185,129,0.5)]' :
+                    isPast ? 'border-emerald-800/50 bg-emerald-950/30 text-emerald-700/50' :
+                    'border-emerald-900/30 bg-black/40 text-emerald-600/50'
+                  }`}>
+                    <span className="text-[9px] sm:text-[10px] font-bold">Dzień {day}</span>
+                    {day === 7 ? <Gift className="w-4 h-4 mt-0.5 text-yellow-500" /> : <span className="text-[10px] sm:text-xs font-bold">{day * 100} B</span>}
+                  </div>
+                )
+              })}
+            </div>
+            
+            <button 
+              onClick={handleClaimDaily}
+              className="w-full py-3 rounded-xl border border-emerald-500 bg-emerald-600/20 text-emerald-400 font-bold uppercase tracking-wider hover:bg-emerald-500/30 active:scale-95 transition-all shadow-[0_0_15px_rgba(16,185,129,0.3)]"
+            >
+              Odbierz Nagrodę
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* Stats Modal */}
+      {showStatsModal && (
+        <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/80 backdrop-blur-sm p-4" onClick={(e) => { if (e.target === e.currentTarget) setShowStatsModal(false) }}>
+          <div className="w-full max-w-sm rounded-2xl border border-emerald-500/50 bg-slate-900/95 p-4 sm:p-6 flex flex-col shadow-[0_0_20px_rgba(16,185,129,0.2)]">
+            <div className="flex justify-between items-center mb-4">
+              <h2 className="text-lg font-bold text-emerald-400 uppercase tracking-widest flex items-center gap-2">
+                <BarChart2 className="w-5 h-5" /> Centrum Analizy
+              </h2>
+              <button onClick={() => setShowStatsModal(false)} className="text-emerald-500/50 hover:text-emerald-400"><X className="w-5 h-5" /></button>
+            </div>
+            
+            <div className="flex flex-col gap-2 mb-6">
+              <div className="flex justify-between bg-black/40 p-2.5 rounded-xl border border-emerald-900/30">
+                <span className="text-emerald-500/80 text-xs sm:text-sm uppercase tracking-wider">Ilość Kliknięć:</span>
+                <span className="text-emerald-400 font-bold text-xs sm:text-sm">{stats.totalClicks}</span>
+              </div>
+              <div className="flex justify-between bg-black/40 p-2.5 rounded-xl border border-emerald-900/30">
+                <span className="text-emerald-500/80 text-xs sm:text-sm uppercase tracking-wider">Max Wirus:</span>
+                <span className="text-emerald-400 font-bold text-xs sm:text-sm">Lvl {stats.maxLevel}</span>
+              </div>
+            </div>
+
+            <div className="flex items-end justify-between h-20 gap-1.5 p-2 bg-black/40 rounded-xl border border-emerald-900/30">
+              {[40, 70, 30, 80, 50, 90, 60, 100].map((h, i) => (
+                <div key={i} className="w-full bg-emerald-500/50 rounded-t-sm animate-pulse shadow-[0_0_8px_rgba(16,185,129,0.4)]" style={{ height: `${h}%`, animationDelay: `${i * 0.15}s`, animationDuration: '1.5s' }}></div>
+              ))}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Drop Modal (Ad/Free) */}
       {modalState && modalState.isOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm p-4">
+        <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/80 backdrop-blur-sm p-4">
           <div className={`w-full max-w-sm rounded-2xl border p-4 sm:p-6 flex flex-col items-center text-center shadow-2xl relative overflow-hidden ${
-            modalState.type === 'epic' 
+            modalState.type === 'ad' 
               ? 'border-yellow-500/50 bg-slate-900/95 shadow-[0_0_30px_rgba(234,179,8,0.2)]' 
               : 'border-emerald-500/50 bg-slate-900/95 shadow-[0_0_20px_rgba(16,185,129,0.2)]'
           }`}>
@@ -274,39 +445,45 @@ export default function App() {
                   Nawiązywanie...
                 </div>
               </div>
-            ) : modalState.type === 'epic' ? (
+            ) : modalState.type === 'ad' ? (
               <>
                 <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_center,_var(--tw-gradient-stops))] from-yellow-500/10 via-transparent to-transparent pointer-events-none"></div>
                 <h2 className="text-xl font-bold text-yellow-400 mb-2 uppercase tracking-widest drop-shadow-[0_0_8px_rgba(234,179,8,0.8)]">
-                  Złamałeś serwer!
+                  Zabezpieczony Zrzut
                 </h2>
-                <p className="text-emerald-300/80 text-xs sm:text-sm mb-6">Znaleziono ukryte archiwum danych korporacyjnych.</p>
+                <p className="text-emerald-300/80 text-xs sm:text-sm mb-6">Wymagana autoryzacja strumieniowa, by odszyfrować dane.</p>
                 <div className="flex flex-col gap-3 w-full relative z-10">
                   <button 
-                    onClick={() => handleClaimModal(5)}
-                    className="w-full py-3 rounded-xl border border-yellow-500 bg-yellow-900/40 text-yellow-400 font-bold uppercase tracking-wider shadow-[0_0_15px_rgba(234,179,8,0.4)] hover:bg-yellow-800/60 active:scale-95 transition-all flex items-center justify-center gap-2 animate-pulse"
+                    onClick={() => handleClaimModal()}
+                    className="w-full py-4 rounded-xl border border-yellow-500 bg-yellow-900/40 text-yellow-400 font-bold uppercase tracking-wider shadow-[0_0_15px_rgba(234,179,8,0.4)] hover:bg-yellow-800/60 active:scale-95 transition-all flex items-center justify-center gap-2 animate-pulse"
                   >
-                    <Play className="w-5 h-5" /> ODBIERZ x5 (Wideo)
+                    <Play className="w-6 h-6" /> Obejrzyj Wideo (Zysk x10)
                   </button>
                   <button 
-                    onClick={() => handleClaimModal(1)}
+                    onClick={() => setModalState(null)}
                     className="text-[10px] sm:text-xs text-emerald-500/50 hover:text-emerald-400 transition-colors uppercase tracking-wider py-2"
                   >
-                    Nie, weź zwykłą nagrodę ({formatNum(modalState.reward)})
+                    Zamknij
                   </button>
                 </div>
               </>
             ) : (
               <>
                 <h2 className="text-lg font-bold text-emerald-400 mb-2 uppercase tracking-widest">
-                  Zwykły zrzut danych
+                  Pierwszy Zrzut
                 </h2>
-                <p className="text-emerald-500/60 text-xs sm:text-sm mb-6">Paczka danych przechwycona pomyślnie.</p>
+                <p className="text-emerald-500/60 text-xs sm:text-sm mb-6">Paczka danych bez zabezpieczeń. Darmowy przydział od sieci.</p>
                 <button 
-                  onClick={() => handleClaimModal(1)}
-                  className="w-full py-3 rounded-xl border border-emerald-500/50 bg-emerald-900/30 text-emerald-400 font-bold uppercase tracking-wider hover:bg-emerald-800/40 active:scale-95 transition-all"
+                  onClick={() => handleClaimModal()}
+                  className="w-full py-3 rounded-xl border border-emerald-500/50 bg-emerald-900/30 text-emerald-400 font-bold uppercase tracking-wider hover:bg-emerald-800/40 active:scale-95 transition-all flex items-center justify-center gap-2"
                 >
-                  Odbierz {formatNum(modalState.reward)} Bitów
+                  <Gift className="w-5 h-5" /> Odbierz Darmowy Zrzut
+                </button>
+                <button 
+                  onClick={() => setModalState(null)}
+                  className="text-[10px] sm:text-xs text-emerald-500/50 hover:text-emerald-400 transition-colors uppercase tracking-wider py-2 mt-2"
+                >
+                  Zamknij
                 </button>
               </>
             )}
@@ -318,12 +495,12 @@ export default function App() {
       <div className="w-full max-w-lg mb-1 border border-emerald-500/30 rounded-2xl p-2 bg-black/40 backdrop-blur-md relative z-10 shadow-[0_0_15px_rgba(16,185,129,0.15)] flex-shrink-0 flex flex-col gap-1">
         <div className="flex justify-between items-center">
           <h1 className="text-sm sm:text-lg font-bold tracking-widest uppercase shadow-emerald-500/50 drop-shadow-md">
-            TERMINAL_OS v1.5
+            TERMINAL_OS v1.6
           </h1>
           <button 
             onClick={() => { if (!isBoostActive) setBoostTimeLeft(30) }}
             disabled={isBoostActive}
-            className={`px-2 py-1 rounded-lg border text-[10px] sm:text-xs font-bold uppercase transition-colors ${
+            className={`mr-16 sm:mr-20 px-2 py-1 rounded-lg border text-[10px] sm:text-xs font-bold uppercase transition-colors ${
               isBoostActive 
                 ? 'border-yellow-900/50 text-yellow-700/50 bg-yellow-900/10 cursor-not-allowed' 
                 : 'border-yellow-500/60 text-yellow-400 hover:bg-yellow-500/20 hover:border-yellow-400 cursor-pointer shadow-[0_0_8px_rgba(234,179,8,0.3)] animate-pulse'
@@ -386,7 +563,7 @@ export default function App() {
             onClick={handleClaimDropClick}
             className="w-full px-2 py-1.5 sm:py-2 rounded-xl border border-purple-500/60 bg-purple-900/30 font-bold text-xs sm:text-sm uppercase tracking-widest text-purple-400 shadow-[0_0_15px_rgba(168,85,247,0.3)] hover:bg-purple-800/40 active:scale-95 cursor-pointer animate-pulse flex items-center justify-center gap-2"
           >
-            <Gift className="w-4 h-4" /> [ ODBIERZ ZRZUT DANYCH ]
+            <Gift className="w-4 h-4" /> [ ZDEKODUJ ZRZUT Z SIECI ]
           </button>
         )}
         
@@ -401,6 +578,16 @@ export default function App() {
         className="flex overflow-x-auto gap-2 py-1 px-1 shrink-0 w-full max-w-lg mb-1 hide-scrollbar relative z-10" 
         style={{ scrollbarWidth: 'none', msOverflowStyle: 'none' }}
       >
+        <UpgradeBtn 
+          title="Wirus Wciskający" 
+          desc="+5 kliku" 
+          baseCost={1000} 
+          count={upgrades.clickVirus} 
+          coins={coins}
+          icon={MousePointerClick}
+          animClass="animate-bounce text-emerald-400"
+          onClick={() => buyUpgrade('clickVirus', 1000)} 
+        />
         <UpgradeBtn 
           title="Auto-Clicker" 
           desc="10% klik/s" 
@@ -455,12 +642,18 @@ export default function App() {
           Kompiluj Skrypt ({formatNum(scriptCost)})
         </button>
         
-        <div className="h-4 mt-0.5 flex items-center justify-center">
-          {!hasEmptySlot && (
-            <div className="text-red-400 animate-pulse font-bold uppercase relative z-10 text-[10px] sm:text-xs tracking-widest drop-shadow-[0_0_5px_rgba(248,113,113,0.5)]">
-              [ BŁĄD: Brak miejsca ]
-            </div>
-          )}
+        <div className="h-4 mt-0.5 flex items-center justify-between w-full px-2">
+          <div className="flex-1"></div>
+          <div className="flex-1 flex justify-center">
+            {!hasEmptySlot && (
+              <div className="text-red-400 animate-pulse font-bold uppercase relative z-10 text-[10px] sm:text-xs tracking-widest drop-shadow-[0_0_5px_rgba(248,113,113,0.5)]">
+                [ Brak Miejsca ]
+              </div>
+            )}
+          </div>
+          <div className="flex-1 flex justify-end">
+             <button onClick={handleResetDaily} className="text-[8px] text-emerald-900/60 hover:text-emerald-500/80 transition-colors">[Dev: Reset Daily]</button>
+          </div>
         </div>
       </div>
     </div>
@@ -483,11 +676,11 @@ function UpgradeBtn({ title, desc, baseCost, count, icon: Icon, animClass, coins
     >
       <div className="flex items-center gap-1 mb-0.5">
         <Icon className={`w-3 h-3 sm:w-4 sm:h-4 ${count > 0 ? animClass : 'opacity-50'}`} />
-        <span className="text-[10px] sm:text-xs font-bold leading-tight">{title}</span>
+        <span className="text-[9px] sm:text-[10px] font-bold leading-tight">{title}</span>
       </div>
       <span className="text-[8px] sm:text-[9px] leading-tight text-emerald-600/80 my-0.5">{desc}</span>
       <span className="text-[9px] sm:text-[10px] font-bold text-emerald-300">{formatNum(currentCost)} B</span>
-      <span className="text-[8px] sm:text-[9px] mt-0.5 opacity-70">Posiadasz: {count} szt.</span>
+      <span className="text-[8px] sm:text-[9px] mt-0.5 opacity-70">Szt: {count}</span>
     </button>
   );
 }
