@@ -10,7 +10,8 @@ import {
   Bot,
   Flame,
   Zap,
-  Gift
+  Gift,
+  Play
 } from 'lucide-react';
 
 type Item = {
@@ -57,8 +58,8 @@ const LOGS = [
 ];
 
 export default function App() {
-  const [coins, setCoins] = useState(100);
-  const [scriptCost, setScriptCost] = useState(25);
+  const [coins, setCoins] = useState(0);
+  const [scriptCost, setScriptCost] = useState(40);
   const [grid, setGrid] = useState<GridSlot[]>(Array(16).fill(null));
   
   const [mergedIndex, setMergedIndex] = useState<number | null>(null);
@@ -67,13 +68,18 @@ export default function App() {
   const [logText, setLogText] = useState(LOGS[0]);
   
   const [upgrades, setUpgrades] = useState({
-    autoClicker: false,
-    cryptoMiner: false,
-    trollFarm: false,
+    autoClicker: 0,
+    cryptoMiner: 0,
+    trollFarm: 0,
   });
 
   const [toasts, setToasts] = useState<{id: number, msg: string}[]>([]);
   const toastIdCounter = useRef(0);
+
+  const [modalState, setModalState] = useState<{isOpen: boolean, type: 'normal' | 'epic', reward: number, isWatching: boolean} | null>(null);
+
+  const [floatingTexts, setFloatingTexts] = useState<{id: number, text: string, x: number, y: number}[]>([]);
+  const floatingIdCounter = useRef(0);
 
   const addToast = (msg: string) => {
     const id = toastIdCounter.current++;
@@ -84,12 +90,13 @@ export default function App() {
   };
 
   const gridIncome = grid.reduce((sum, item) => sum + (item ? LEVEL_INCOME[item.level] || 0 : 0), 0);
-  const passiveIncomeMultiplier = (upgrades.cryptoMiner ? 2 : 1) * (upgrades.trollFarm ? 5 : 1);
+  const passiveIncomeMultiplier = 1 + (upgrades.cryptoMiner * 1) + (upgrades.trollFarm * 4);
+  const basePassiveIncome = gridIncome * passiveIncomeMultiplier;
   
-  const baseClickPower = 1 + Math.floor(0.02 * gridIncome * passiveIncomeMultiplier);
-  const autoClickerIncome = upgrades.autoClicker ? Math.floor(0.1 * baseClickPower) : 0;
+  const baseClickPower = 1 + Math.floor(0.01 * basePassiveIncome);
+  const autoClickerIncome = upgrades.autoClicker * Math.max(1, Math.floor(0.1 * baseClickPower));
   
-  const baseTotalIncome = (gridIncome * passiveIncomeMultiplier) + autoClickerIncome;
+  const baseTotalIncome = basePassiveIncome + autoClickerIncome;
   
   const isBoostActive = boostTimeLeft > 0;
   const boostMultiplier = isBoostActive ? 3 : 1;
@@ -97,14 +104,24 @@ export default function App() {
   const finalTotalIncome = baseTotalIncome * boostMultiplier;
   const finalClickPower = baseClickPower * boostMultiplier;
 
-  const handleManualAttack = () => {
+  const handleManualAttack = (e: React.MouseEvent) => {
     setCoins(prev => prev + finalClickPower);
+    
+    const id = floatingIdCounter.current++;
+    const x = e.clientX + (Math.random() * 40 - 20);
+    const y = e.clientY + (Math.random() * 20 - 20) - 20;
+    
+    setFloatingTexts(prev => [...prev, { id, text: `+${formatNum(finalClickPower)}`, x, y }]);
+    setTimeout(() => {
+      setFloatingTexts(prev => prev.filter(f => f.id !== id));
+    }, 1000);
   };
 
-  const buyUpgrade = (key: keyof typeof upgrades, cost: number) => {
-    if (coins >= cost && !upgrades[key]) {
-      setCoins(prev => prev - cost);
-      setUpgrades(prev => ({ ...prev, [key]: true }));
+  const buyUpgrade = (key: keyof typeof upgrades, baseCost: number) => {
+    const currentCost = Math.floor(baseCost * Math.pow(1.5, upgrades[key]));
+    if (coins >= currentCost) {
+      setCoins(prev => prev - currentCost);
+      setUpgrades(prev => ({ ...prev, [key]: prev[key] + 1 }));
     }
   };
 
@@ -174,11 +191,35 @@ export default function App() {
     e.preventDefault();
   };
 
-  const handleClaimDrop = () => {
-    const reward = Math.max(500, 100 * finalTotalIncome);
-    setCoins(prev => prev + reward);
-    setDropTimer(60);
-    addToast(`Otrzymano Zrzut: +${formatNum(reward)}!`);
+  const handleClaimDropClick = () => {
+    const isEpic = Math.random() < 0.4;
+    const reward = Math.max(50, 100 * finalTotalIncome);
+    setModalState({
+      isOpen: true,
+      type: isEpic ? 'epic' : 'normal',
+      reward,
+      isWatching: false
+    });
+  };
+
+  const handleClaimModal = (multiplier: number) => {
+    if (modalState) {
+      if (multiplier > 1) {
+        setModalState({ ...modalState, isWatching: true });
+        addToast("Ładowanie połączenia z proxy...");
+        setTimeout(() => {
+          setCoins(prev => prev + modalState.reward * multiplier);
+          setDropTimer(60);
+          setModalState(null);
+          addToast(`Epicki Zrzut: +${formatNum(modalState.reward * multiplier)}!`);
+        }, 2000);
+      } else {
+        setCoins(prev => prev + modalState.reward);
+        setDropTimer(60);
+        setModalState(null);
+        addToast(`Zrzut Danych: +${formatNum(modalState.reward)}!`);
+      }
+    }
   };
 
   const hasEmptySlot = grid.some(slot => slot === null);
@@ -186,23 +227,98 @@ export default function App() {
 
   return (
     <div className="h-[100dvh] w-full overflow-hidden bg-slate-950 bg-[radial-gradient(ellipse_at_top,_var(--tw-gradient-stops))] from-emerald-950/40 via-slate-950 to-black text-emerald-500 font-mono flex flex-col items-center p-1 sm:p-2 relative selection:bg-emerald-500 selection:text-black">
-      <style>{'.hide-scrollbar::-webkit-scrollbar { display: none; }'}</style>
+      <style>{`
+        .hide-scrollbar::-webkit-scrollbar { display: none; }
+        @keyframes floatUp {
+          0% { transform: translate(-50%, 0) scale(1); opacity: 1; }
+          100% { transform: translate(-50%, -60px) scale(1.5); opacity: 0; }
+        }
+        .animate-float-up {
+          animation: floatUp 1s ease-out forwards;
+        }
+      `}</style>
       <div className="pointer-events-none absolute inset-0 bg-[linear-gradient(rgba(18,16,16,0)_50%,rgba(0,0,0,0.25)_50%),linear-gradient(90deg,rgba(255,0,0,0.06),rgba(0,255,0,0.02),rgba(0,0,255,0.06))] bg-[length:100%_4px,3px_100%] z-0 opacity-40"></div>
       
+      {/* Floating Texts */}
+      {floatingTexts.map(f => (
+        <div 
+          key={f.id} 
+          className="fixed pointer-events-none z-50 text-emerald-400 font-bold text-lg drop-shadow-[0_0_5px_rgba(16,185,129,0.8)] animate-float-up" 
+          style={{ left: f.x, top: f.y }}
+        >
+          {f.text}
+        </div>
+      ))}
+
       {/* Toasts */}
       <div className="absolute top-4 right-4 z-50 flex flex-col gap-2 pointer-events-none">
         {toasts.map(t => (
-          <div key={t.id} className="bg-black/60 backdrop-blur-md border border-emerald-500/50 text-emerald-300 text-xs sm:text-sm px-3 py-1.5 rounded-xl shadow-[0_0_10px_rgba(16,185,129,0.3)] animate-bounce">
+          <div key={t.id} className="bg-black/80 backdrop-blur-md border border-emerald-500/50 text-emerald-300 text-xs sm:text-sm px-3 py-1.5 rounded-xl shadow-[0_0_10px_rgba(16,185,129,0.3)] animate-bounce">
             {t.msg}
           </div>
         ))}
       </div>
 
+      {/* Ad Roulette Modal */}
+      {modalState && modalState.isOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm p-4">
+          <div className={`w-full max-w-sm rounded-2xl border p-4 sm:p-6 flex flex-col items-center text-center shadow-2xl relative overflow-hidden ${
+            modalState.type === 'epic' 
+              ? 'border-yellow-500/50 bg-slate-900/95 shadow-[0_0_30px_rgba(234,179,8,0.2)]' 
+              : 'border-emerald-500/50 bg-slate-900/95 shadow-[0_0_20px_rgba(16,185,129,0.2)]'
+          }`}>
+            {modalState.isWatching ? (
+              <div className="flex flex-col items-center justify-center py-8">
+                <Network className="w-12 h-12 text-yellow-400 animate-spin mb-4" />
+                <div className="text-yellow-400 font-bold uppercase tracking-widest animate-pulse">
+                  Nawiązywanie...
+                </div>
+              </div>
+            ) : modalState.type === 'epic' ? (
+              <>
+                <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_center,_var(--tw-gradient-stops))] from-yellow-500/10 via-transparent to-transparent pointer-events-none"></div>
+                <h2 className="text-xl font-bold text-yellow-400 mb-2 uppercase tracking-widest drop-shadow-[0_0_8px_rgba(234,179,8,0.8)]">
+                  Złamałeś serwer!
+                </h2>
+                <p className="text-emerald-300/80 text-xs sm:text-sm mb-6">Znaleziono ukryte archiwum danych korporacyjnych.</p>
+                <div className="flex flex-col gap-3 w-full relative z-10">
+                  <button 
+                    onClick={() => handleClaimModal(5)}
+                    className="w-full py-3 rounded-xl border border-yellow-500 bg-yellow-900/40 text-yellow-400 font-bold uppercase tracking-wider shadow-[0_0_15px_rgba(234,179,8,0.4)] hover:bg-yellow-800/60 active:scale-95 transition-all flex items-center justify-center gap-2 animate-pulse"
+                  >
+                    <Play className="w-5 h-5" /> ODBIERZ x5 (Wideo)
+                  </button>
+                  <button 
+                    onClick={() => handleClaimModal(1)}
+                    className="text-[10px] sm:text-xs text-emerald-500/50 hover:text-emerald-400 transition-colors uppercase tracking-wider py-2"
+                  >
+                    Nie, weź zwykłą nagrodę ({formatNum(modalState.reward)})
+                  </button>
+                </div>
+              </>
+            ) : (
+              <>
+                <h2 className="text-lg font-bold text-emerald-400 mb-2 uppercase tracking-widest">
+                  Zwykły zrzut danych
+                </h2>
+                <p className="text-emerald-500/60 text-xs sm:text-sm mb-6">Paczka danych przechwycona pomyślnie.</p>
+                <button 
+                  onClick={() => handleClaimModal(1)}
+                  className="w-full py-3 rounded-xl border border-emerald-500/50 bg-emerald-900/30 text-emerald-400 font-bold uppercase tracking-wider hover:bg-emerald-800/40 active:scale-95 transition-all"
+                >
+                  Odbierz {formatNum(modalState.reward)} Bitów
+                </button>
+              </>
+            )}
+          </div>
+        </div>
+      )}
+
       {/* Header Panel */}
       <div className="w-full max-w-lg mb-1 border border-emerald-500/30 rounded-2xl p-2 bg-black/40 backdrop-blur-md relative z-10 shadow-[0_0_15px_rgba(16,185,129,0.15)] flex-shrink-0 flex flex-col gap-1">
         <div className="flex justify-between items-center">
           <h1 className="text-sm sm:text-lg font-bold tracking-widest uppercase shadow-emerald-500/50 drop-shadow-md">
-            TERMINAL_OS v1.4
+            TERMINAL_OS v1.5
           </h1>
           <button 
             onClick={() => { if (!isBoostActive) setBoostTimeLeft(30) }}
@@ -267,7 +383,7 @@ export default function App() {
       <div className="w-full max-w-lg flex flex-col items-center flex-shrink-0 relative z-10 gap-1 mb-1">
         {dropTimer === 0 && (
           <button 
-            onClick={handleClaimDrop}
+            onClick={handleClaimDropClick}
             className="w-full px-2 py-1.5 sm:py-2 rounded-xl border border-purple-500/60 bg-purple-900/30 font-bold text-xs sm:text-sm uppercase tracking-widest text-purple-400 shadow-[0_0_15px_rgba(168,85,247,0.3)] hover:bg-purple-800/40 active:scale-95 cursor-pointer animate-pulse flex items-center justify-center gap-2"
           >
             <Gift className="w-4 h-4" /> [ ODBIERZ ZRZUT DANYCH ]
@@ -288,25 +404,31 @@ export default function App() {
         <UpgradeBtn 
           title="Auto-Clicker" 
           desc="10% klik/s" 
-          cost={1500} 
-          bought={upgrades.autoClicker} 
-          canAfford={coins >= 1500} 
+          baseCost={1500}
+          count={upgrades.autoClicker} 
+          coins={coins}
+          icon={Bot}
+          animClass="animate-bounce text-blue-400"
           onClick={() => buyUpgrade('autoClicker', 1500)} 
         />
         <UpgradeBtn 
           title="Koparka Krypto" 
           desc="Zarobek x2" 
-          cost={20000} 
-          bought={upgrades.cryptoMiner} 
-          canAfford={coins >= 20000} 
+          baseCost={20000} 
+          count={upgrades.cryptoMiner} 
+          coins={coins}
+          icon={Cpu}
+          animClass="animate-[spin_3s_linear_infinite] text-purple-400"
           onClick={() => buyUpgrade('cryptoMiner', 20000)} 
         />
         <UpgradeBtn 
           title="Farma Trolli" 
           desc="Zarobek x5" 
-          cost={150000} 
-          bought={upgrades.trollFarm} 
-          canAfford={coins >= 150000} 
+          baseCost={150000} 
+          count={upgrades.trollFarm} 
+          coins={coins}
+          icon={Bug}
+          animClass="animate-pulse text-red-400"
           onClick={() => buyUpgrade('trollFarm', 150000)} 
         />
       </div>
@@ -345,15 +467,9 @@ export default function App() {
   );
 }
 
-function UpgradeBtn({ title, desc, cost, bought, canAfford, onClick }: { title: string, desc: string, cost: number, bought: boolean, canAfford: boolean, onClick: () => void }) {
-  if (bought) {
-    return (
-      <button disabled className="flex-none w-[110px] sm:w-[120px] rounded-xl border border-emerald-900/50 text-emerald-800 p-1.5 flex flex-col items-center justify-center text-center cursor-not-allowed bg-black/40 backdrop-blur-md">
-        <span className="text-[10px] sm:text-xs font-bold leading-tight">{title}</span>
-        <span className="text-[9px] sm:text-[10px] mt-1 opacity-70">[ KUPIONE ]</span>
-      </button>
-    );
-  }
+function UpgradeBtn({ title, desc, baseCost, count, icon: Icon, animClass, coins, onClick }: any) {
+  const currentCost = Math.floor(baseCost * Math.pow(1.5, count));
+  const canAfford = coins >= currentCost;
   
   return (
     <button 
@@ -365,9 +481,13 @@ function UpgradeBtn({ title, desc, cost, bought, canAfford, onClick }: { title: 
           : 'border-emerald-900/30 text-emerald-800 bg-black/20 cursor-not-allowed'
       }`}
     >
-      <span className="text-[10px] sm:text-xs font-bold leading-tight">{title}</span>
+      <div className="flex items-center gap-1 mb-0.5">
+        <Icon className={`w-3 h-3 sm:w-4 sm:h-4 ${count > 0 ? animClass : 'opacity-50'}`} />
+        <span className="text-[10px] sm:text-xs font-bold leading-tight">{title}</span>
+      </div>
       <span className="text-[8px] sm:text-[9px] leading-tight text-emerald-600/80 my-0.5">{desc}</span>
-      <span className="text-[9px] sm:text-[10px] font-bold text-emerald-300">{formatNum(cost)} B</span>
+      <span className="text-[9px] sm:text-[10px] font-bold text-emerald-300">{formatNum(currentCost)} B</span>
+      <span className="text-[8px] sm:text-[9px] mt-0.5 opacity-70">Posiadasz: {count} szt.</span>
     </button>
   );
 }
