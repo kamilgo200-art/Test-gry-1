@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
-import { CandlestickChart } from "./CandlestickChart";
+import { PlayerProgress } from "./PlayerProgress";
 
 import { Preferences } from '@capacitor/preferences';
 
@@ -1561,7 +1561,7 @@ function GameApp() {
               </div>
             </div>
 
-            <CandlestickChart />
+            <PlayerProgress />
           </div>
         </div>
       )}

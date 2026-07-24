@@ -1,6 +1,6 @@
 import React, { useState, useMemo, useEffect } from 'react';
 
-export const CandlestickChart = () => {
+export const PlayerProgress = () => {
     const [interval, setChartInterval] = useState('1M');
     const [tick, setTick] = useState(0);
 
