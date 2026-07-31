@@ -2390,7 +2390,7 @@ function GameApp() {
                   </div>
                   <div>
                       <h3 className="font-bold text-emerald-400 mb-1">7. Kontakt</h3>
-                      <p>W razie jakichkolwiek pytań dotyczących niniejszej Polityki Prywatności, prosimy o kontakt pod adresem e-mail: <a href="mailto:fusionreaktor8@gmail.com" className="text-emerald-400 underline hover:text-emerald-300">fusionreaktor8@gmail.com</a>.</p>
+                      <p>W razie jakichkolwiek pytań dotyczących niniejszej Polityki Prywatności, prosimy o kontakt pod adresem e-mail: <a href="mailto:ferraeter@gmail.com" className="text-emerald-400 underline hover:text-emerald-300">ferraeter@gmail.com</a>.</p>
                   </div>
               </div>
            </div>
