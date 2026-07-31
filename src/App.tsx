@@ -222,6 +222,12 @@ const vibrate = (pattern: number | number[]) => {
 class AudioEngine {
   private ctx: AudioContext | null = null;
   public isMuted: boolean = false;
+  
+  public musicVolume: number = 0.05;
+  private currentTrack: 'none' | 'cyberpunk' | 'drone' | 'bossfight' | 'synthwave' = 'none';
+  private musicInterval: any = null;
+  private nextNoteTime: number = 0;
+  private musicStep: number = 0;
 
   init() {
     if (this.isMuted) return;
@@ -231,6 +237,130 @@ class AudioEngine {
     if (this.ctx.state === 'suspended') {
       this.ctx.resume();
     }
+  }
+
+  private playNote(freq: number, type: OscillatorType, duration: number, vol: number, startTime: number) {
+      if (!this.ctx) return;
+      try {
+          const osc = this.ctx.createOscillator();
+          const gain = this.ctx.createGain();
+          osc.type = type;
+          osc.frequency.setValueAtTime(freq, startTime);
+          gain.gain.setValueAtTime(0, startTime);
+          gain.gain.linearRampToValueAtTime(vol * this.musicVolume, startTime + 0.05);
+          gain.gain.exponentialRampToValueAtTime(0.001, startTime + duration);
+          osc.connect(gain);
+          gain.connect(this.ctx.destination);
+          osc.start(startTime);
+          osc.stop(startTime + duration);
+      } catch(e) {}
+  }
+  
+  private playKick(t: number, vol: number = 0.5) {
+      if (!this.ctx) return;
+      try {
+          const osc = this.ctx.createOscillator();
+          const gain = this.ctx.createGain();
+          osc.type = 'sine';
+          osc.frequency.setValueAtTime(150, t);
+          osc.frequency.exponentialRampToValueAtTime(10, t + 0.1);
+          gain.gain.setValueAtTime(vol * this.musicVolume * 2, t);
+          gain.gain.exponentialRampToValueAtTime(0.001, t + 0.1);
+          osc.connect(gain);
+          gain.connect(this.ctx.destination);
+          osc.start(t);
+          osc.stop(t + 0.1);
+      } catch(e) {}
+  }
+
+  private playHiHat(t: number, vol: number = 0.1) {
+      if (!this.ctx) return;
+      try {
+          const osc = this.ctx.createOscillator();
+          const gain = this.ctx.createGain();
+          osc.type = 'square';
+          osc.frequency.setValueAtTime(8000, t);
+          gain.gain.setValueAtTime(vol * this.musicVolume, t);
+          gain.gain.exponentialRampToValueAtTime(0.001, t + 0.05);
+          osc.connect(gain);
+          gain.connect(this.ctx.destination);
+          osc.start(t);
+          osc.stop(t + 0.05);
+      } catch(e) {}
+  }
+
+  setMusicVolume(vol: number) {
+      this.musicVolume = vol;
+  }
+
+  startSoundtrack(track: 'none' | 'cyberpunk' | 'drone' | 'bossfight' | 'synthwave') {
+      this.currentTrack = track;
+      if (this.musicInterval) {
+          clearInterval(this.musicInterval);
+          this.musicInterval = null;
+      }
+      if (track === 'none' || this.isMuted) return;
+      
+      this.init();
+      if (!this.ctx) return;
+      
+      this.nextNoteTime = this.ctx.currentTime + 0.1;
+      this.musicStep = 0;
+      
+      const cyberpunkNotes = [220, 261.63, 329.63, 261.63, 220, 164.81, 196.00, 164.81];
+      const bossfightNotes = [329.63, 329.63, 659.25, 493.88, 0, 440, 0, 392.00, 0, 329.63, 392.00, 440];
+      const synthwaveBass = [65.41, 65.41, 65.41, 65.41, 98.00, 98.00, 98.00, 98.00, 87.31, 87.31, 87.31, 87.31, 130.81, 130.81, 116.54, 116.54];
+      
+      this.musicInterval = setInterval(() => {
+          if (!this.ctx || this.isMuted || this.currentTrack !== track) return;
+          const bpm = track === 'cyberpunk' ? 110 : track === 'bossfight' ? 150 : track === 'synthwave' ? 120 : 30;
+          const stepTime = 60 / bpm / 4; // 16th notes
+          
+          while (this.nextNoteTime < this.ctx.currentTime + 0.1) {
+              const t = this.nextNoteTime;
+              
+              if (track === 'cyberpunk') {
+                  if (this.musicStep % 4 === 0) this.playKick(t, 0.4);
+                  if (this.musicStep % 2 === 1) this.playHiHat(t, 0.1);
+                  const freq = cyberpunkNotes[this.musicStep % cyberpunkNotes.length];
+                  this.playNote(freq, 'square', 0.15, 0.2, t);
+                  
+              } else if (track === 'bossfight') {
+                  if (this.musicStep % 4 === 0) this.playKick(t, 0.5);
+                  if (this.musicStep % 2 === 1) this.playHiHat(t, 0.15);
+                  const stepMod = this.musicStep % 16;
+                  if (stepMod < bossfightNotes.length) {
+                      const freq = bossfightNotes[stepMod];
+                      if (freq) this.playNote(freq, 'square', 0.1, 0.35, t);
+                  }
+                  if (this.musicStep % 8 === 4) {
+                      this.playNote(110, 'triangle', 0.2, 0.4, t);
+                  }
+                  
+              } else if (track === 'synthwave') {
+                  // Four on the floor kick
+                  if (this.musicStep % 4 === 0) this.playKick(t, 0.6);
+                  // Off-beat hihat
+                  if (this.musicStep % 4 === 2) this.playHiHat(t, 0.2);
+                  // Driving bass
+                  const bassFreq = synthwaveBass[this.musicStep % 16];
+                  this.playNote(bassFreq, 'sawtooth', 0.15, 0.3, t);
+                  // Occasional synth chords/lead on the offbeat
+                  if (this.musicStep % 16 === 14) {
+                      this.playNote(440, 'triangle', 0.4, 0.2, t);
+                  }
+                  
+              } else if (track === 'drone') {
+                  if (this.musicStep % 32 === 0) {
+                      this.playNote(55, 'sawtooth', 8.0, 0.3, t);
+                      this.playNote(55.5, 'sine', 8.0, 0.3, t);
+                  }
+              }
+              
+              this.nextNoteTime += stepTime;
+              this.musicStep++;
+          }
+      }, 25);
   }
 
   play(type: 'click' | 'merge' | 'jackpot' | 'crash') {
@@ -408,7 +538,7 @@ function GameApp() {
   const [verifyingContracts, setVerifyingContracts] = useState<string[]>([]);
   const [hackerEvent, setHackerEvent] = useState<{name: string, isOpen: boolean, isHacking: boolean} | null>(null);
   
-  const [activeModal, setActiveModal] = useState<'market' | 'casino' | 'siatka' | 'settings' | null>(null);
+  const [activeModal, setActiveModal] = useState<'market' | 'casino' | 'siatka' | 'settings' | 'privacy' | null>(null);
   const [showLeaderboard, setShowLeaderboard] = useState(false);
   const [offlineEarnings, setOfflineEarnings] = useState<{seconds: number, amount: number} | null>(null);
 
@@ -483,6 +613,11 @@ function GameApp() {
         return localStorage.getItem('hackerMuteState') === 'true';
     } catch(e) { return false; }
   });
+  const [soundtrackType, setSoundtrackType] = useState<'none' | 'cyberpunk' | 'drone' | 'bossfight' | 'synthwave'>(() => {
+    try {
+        return (localStorage.getItem('hackerSoundtrack') as any) || 'none';
+    } catch(e) { return 'none'; }
+  });
   const [isSaving, setIsSaving] = useState(false);
 
   // ADMOB INIT
@@ -491,7 +626,6 @@ function GameApp() {
           try {
               if (Capacitor.isNativePlatform()) {
                   await AdMob.initialize({
-                      requestTrackingAuthorization: true,
                       testingDevices: ['2077ef9a63d2b398840261c8221a0c9b'],
                       initializeForTesting: true,
                   });
@@ -503,11 +637,19 @@ function GameApp() {
 
   useEffect(() => {
      audio.isMuted = isMuted;
+     audio.startSoundtrack(soundtrackType);
      try { 
        localStorage.setItem('hackerMuteState', isMuted ? 'true' : 'false'); 
        Preferences.set({ key: 'hackerMuteState', value: isMuted ? 'true' : 'false' });
      } catch(e) {}
-  }, [isMuted]);
+  }, [isMuted, soundtrackType]);
+
+  useEffect(() => {
+     try { 
+       localStorage.setItem('hackerSoundtrack', soundtrackType);
+       Preferences.set({ key: 'hackerSoundtrack', value: soundtrackType });
+     } catch(e) {}
+  }, [soundtrackType]);
   
   // CASINO
   const [casinoRolling, setCasinoRolling] = useState(false);
@@ -2133,6 +2275,42 @@ function GameApp() {
                       </div>
                   </div>
                   
+                  <div className="flex flex-col gap-2">
+                      <span className="text-emerald-500 font-bold text-sm uppercase">Soundtrack (Web Audio)</span>
+                      <div className="flex flex-col gap-1 bg-black/40 rounded-lg p-2 border border-emerald-900/40">
+                          <button 
+                            onClick={() => { setSoundtrackType('none'); reportAction(); }}
+                            className={`py-1.5 rounded font-bold text-xs transition-colors ${soundtrackType === 'none' ? 'bg-emerald-600 text-black' : 'text-emerald-500 hover:bg-emerald-900/30'}`}
+                          >
+                              [ WYŁĄCZONY ]
+                          </button>
+                          <button 
+                            onClick={() => { setSoundtrackType('cyberpunk'); reportAction(); }}
+                            className={`py-1.5 rounded font-bold text-xs transition-colors ${soundtrackType === 'cyberpunk' ? 'bg-emerald-600 text-black' : 'text-emerald-500 hover:bg-emerald-900/30'}`}
+                          >
+                              1. CYBERPUNK (Arp)
+                          </button>
+                          <button 
+                            onClick={() => { setSoundtrackType('synthwave'); reportAction(); }}
+                            className={`py-1.5 rounded font-bold text-xs transition-colors ${soundtrackType === 'synthwave' ? 'bg-emerald-600 text-black' : 'text-emerald-500 hover:bg-emerald-900/30'}`}
+                          >
+                              2. SYNTHWAVE (Hotline)
+                          </button>
+                          <button 
+                            onClick={() => { setSoundtrackType('bossfight'); reportAction(); }}
+                            className={`py-1.5 rounded font-bold text-xs transition-colors ${soundtrackType === 'bossfight' ? 'bg-emerald-600 text-black' : 'text-emerald-500 hover:bg-emerald-900/30'}`}
+                          >
+                              3. BOSS FIGHT (Megalovania vibe)
+                          </button>
+                          <button 
+                            onClick={() => { setSoundtrackType('drone'); reportAction(); }}
+                            className={`py-1.5 rounded font-bold text-xs transition-colors ${soundtrackType === 'drone' ? 'bg-emerald-600 text-black' : 'text-emerald-500 hover:bg-emerald-900/30'}`}
+                          >
+                              4. DARK DRONE (Ambiens)
+                          </button>
+                      </div>
+                  </div>
+
                   <div className="flex flex-col gap-2 mt-4">
                       <span className="text-emerald-500 font-bold text-sm uppercase">Wsparcie Projektu</span>
                       <button onClick={async () => {
@@ -2163,6 +2341,56 @@ function GameApp() {
                       }} className="w-full py-2 bg-yellow-600/20 text-yellow-400 border border-yellow-500/50 rounded-lg font-bold hover:bg-yellow-500/30 active:scale-95 transition-all flex items-center justify-center gap-2">
                           <Play className="w-4 h-4" /> OBEJRZYJ WIDEO (+1h Zysku)
                       </button>
+                  </div>
+                  
+                  <div className="mt-6 flex justify-center">
+                      <button 
+                          onClick={() => setActiveModal('privacy')}
+                          className="text-[10px] text-emerald-500/50 hover:text-emerald-400 underline underline-offset-2 transition-colors uppercase tracking-wider"
+                      >
+                          Polityka Prywatności
+                      </button>
+                  </div>
+              </div>
+           </div>
+        </div>
+      )}
+
+      {/* Privacy Policy Modal */}
+      {activeModal === 'privacy' && (
+        <div className="fixed inset-0 z-[50] bg-slate-950/95 flex flex-col items-center justify-center p-4 pb-24 overflow-y-auto w-full" onClick={(e) => { if (e.target === e.currentTarget) setActiveModal(null) }}>
+           <div className="w-full max-w-2xl rounded-2xl border border-emerald-500/50 bg-slate-900 p-6 flex flex-col relative max-h-[80vh] overflow-y-auto custom-scrollbar">
+              <button onClick={() => setActiveModal(null)} className="absolute top-4 right-4 text-emerald-500/50 hover:text-emerald-400"><X size={24}/></button>
+              <h2 className="text-xl font-bold text-emerald-400 uppercase tracking-widest mb-6 border-b border-emerald-500/30 pb-2">Polityka Prywatności Aplikacji / Gry Hacker Merge</h2>
+              
+              <div className="w-full flex flex-col gap-4 text-emerald-100 text-sm leading-relaxed">
+                  <div>
+                      <h3 className="font-bold text-emerald-400 mb-1">1. Informacje Ogólne</h3>
+                      <p>Niniejsza Polityka Prywatności określa zasady przetwarzania i ochrony informacji w aplikacji/grze Hacker Merge.</p>
+                  </div>
+                  <div>
+                      <h3 className="font-bold text-emerald-400 mb-1">2. Zbieranie i Wykorzystanie Danych</h3>
+                      <p>Aplikacja Hacker Merge nie zbiera, nie przechowuje ani nie przesyła żadnych danych osobowych użytkowników na zewnętrzne serwery. Wszystkie postępy w grze oraz ustawienia są zapisywane wyłącznie lokalnie na urządzeniu użytkownika.</p>
+                  </div>
+                  <div>
+                      <h3 className="font-bold text-emerald-400 mb-1">3. Dostęp do Funkcji Urządzenia</h3>
+                      <p>Aplikacja wymaga podstawowych uprawnień do pamięci urządzenia (odczyt i zapis) wyłącznie w celu zapisywania i odczytywania stanu gry oraz jej prawidłowego działania na urządzeniu mobilnym. Aplikacja nie uzyskuje dostępu do innych prywatnych plików, kontaktów czy multimediów.</p>
+                  </div>
+                  <div>
+                      <h3 className="font-bold text-emerald-400 mb-1">4. Udostępnianie Danych Podmiotom Trzecim</h3>
+                      <p>Ponieważ aplikacja nie gromadzi danych na zewnątrz, żadne informacje o użytkownikach nie są udostępniane, sprzedawane ani przekazywane podmiotom trzecim (w tym firmom analitycznym czy sieciom reklamowym).</p>
+                  </div>
+                  <div>
+                      <h3 className="font-bold text-emerald-400 mb-1">5. Zarządzanie Danymi</h3>
+                      <p>Pełna kontrola nad danymi pozostaje w rękach użytkownika. Z racji tego, że zapis gry jest w 100% lokalny, odinstalowanie aplikacji lub ręczne wyczyszczenie jej danych z poziomu ustawień urządzenia spowoduje nieodwracalne usunięcie całego zapisanego postępu.</p>
+                  </div>
+                  <div>
+                      <h3 className="font-bold text-emerald-400 mb-1">6. Zmiany w Polityce Prywatności</h3>
+                      <p>Wszelkie ewentualne zmiany w niniejszej Polityce Prywatności będą publikowane bezpośrednio na tej stronie.</p>
+                  </div>
+                  <div>
+                      <h3 className="font-bold text-emerald-400 mb-1">7. Kontakt</h3>
+                      <p>W razie jakichkolwiek pytań dotyczących niniejszej Polityki Prywatności, prosimy o kontakt pod adresem e-mail: <a href="mailto:fusionreaktor8@gmail.com" className="text-emerald-400 underline hover:text-emerald-300">fusionreaktor8@gmail.com</a>.</p>
                   </div>
               </div>
            </div>
