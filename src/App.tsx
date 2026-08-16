@@ -43,7 +43,9 @@ import {
   Briefcase,
   Globe,
   Key,
-  Star
+  Star,
+  Orbit,
+  Bitcoin,
 } from 'lucide-react';
 
 type Item = {
@@ -477,6 +479,9 @@ export default function App() {
 function GameApp() {
   const [notationState, setNotationState] = useState(globalNotation);
   const [coins, setCoins] = useState<number>(() => getInitialState('coins', 0));
+  const [bitcoins, setBitcoins] = useState<number>(() => getInitialState('bitcoins', 0));
+  const [premiumAutoclickers, setPremiumAutoclickers] = useState<number>(() => getInitialState('premiumAutoclickers', 0));
+  const [flyingVirus, setFlyingVirus] = useState<{id: number, top: number, duration: number, type: 'data' | 'btc'} | null>(null);
   const [scriptCost, setScriptCost] = useState<number>(() => getInitialState('scriptCost', 40));
   const [grid, setGrid] = useState<GridSlot[]>(() => getInitialState('grid', Array(16).fill(null)));
   const [upgrades, setUpgrades] = useState(() => getInitialState('upgrades', {
@@ -484,6 +489,10 @@ function GameApp() {
     cryptoMiner: 0,
     trollFarm: 0,
     clickVirus: 0,
+    aiBotnet: 0,
+    quantumDecryptor: 0,
+    darkWebSyndicate: 0,
+    cyberDysonSphere: 0,
   }));
   const [hasUsedFreeDrop, setHasUsedFreeDrop] = useState<boolean>(() => getInitialState('hasUsedFreeDrop', false));
   
@@ -521,7 +530,7 @@ function GameApp() {
   const shadowbanClicks = useRef<number[]>([]);
   const manualClickCountRef = useRef<number>(0);
 
-  const [mergedIndex, setMergedIndex] = useState<number | null>(null);
+  const [mergedAnim, setMergedAnim] = useState<{index: number, type: 'normal' | 'gold' | 'jackpot'} | null>(null);
   const [boostTimeLeft, setBoostTimeLeft] = useState(0);
   const [boostMultiplierValue, setBoostMultiplierValue] = useState(10);
   const [dropTimer, setDropTimer] = useState(120);
@@ -600,7 +609,7 @@ function GameApp() {
     frustrationClicks.current.push(now);
     frustrationClicks.current = frustrationClicks.current.filter(t => now - t <= 2000);
     
-    if (isBlocked || frustrationClicks.current.length > 8) {
+    if (isBlocked || frustrationClicks.current.length > 100) {
       setFrustrationIndex(prev => Math.min(100, prev + 15));
       if (!isBlocked) {
          frustrationClicks.current = [];
@@ -720,11 +729,28 @@ function GameApp() {
   }, [rootMessage, isOverdrive, casinoRolling]);
 
   const gridIncome = grid.reduce((sum, item) => sum + (item ? getLevelIncome(item.level) : 0), 0);
-  const passiveIncomeMultiplier = 1 + (upgrades.cryptoMiner * 1) + (upgrades.trollFarm * 4);
+  
+  const clickVirusMax = upgrades.clickVirus >= 50 ? 2 : 1;
+  const autoClickerMax = upgrades.autoClicker >= 50 ? 2 : 1;
+  const cryptoMinerMax = upgrades.cryptoMiner >= 50 ? 2 : 1;
+  const trollFarmMax = upgrades.trollFarm >= 50 ? 2 : 1;
+  const aiBotnetMax = (upgrades.aiBotnet || 0) >= 50 ? 2 : 1;
+  const quantumDecryptorMax = (upgrades.quantumDecryptor || 0) >= 50 ? 2 : 1;
+  const darkWebSyndicateMax = (upgrades.darkWebSyndicate || 0) >= 50 ? 2 : 1;
+  
+  const bitcoinBonus = (bitcoins || 0) * 0.05;
+  const passiveIncomeMultiplier = 1 
+    + (upgrades.cryptoMiner * 1 * cryptoMinerMax) 
+    + (upgrades.trollFarm * 4 * trollFarmMax)
+    + ((upgrades.aiBotnet || 0) * 10 * aiBotnetMax)
+    + ((upgrades.quantumDecryptor || 0) * 25 * quantumDecryptorMax)
+    + ((upgrades.darkWebSyndicate || 0) * 100 * darkWebSyndicateMax)
+    + ((upgrades.cyberDysonSphere || 0) * 500)
+    + bitcoinBonus;
   const basePassiveIncome = gridIncome * passiveIncomeMultiplier;
   
-  const baseClickPower = 1 + Math.floor(0.01 * basePassiveIncome) + (upgrades.clickVirus * 5);
-  const autoClickerIncome = upgrades.autoClicker * Math.max(1, Math.floor(0.1 * baseClickPower));
+  const baseClickPower = 1 + Math.floor(0.01 * basePassiveIncome) + (upgrades.clickVirus * 5 * clickVirusMax);
+  const autoClickerIncome = upgrades.autoClicker * Math.max(1, Math.floor(0.1 * baseClickPower)) * autoClickerMax;
   
   const baseTotalIncome = basePassiveIncome + autoClickerIncome;
   
@@ -750,13 +776,13 @@ function GameApp() {
     }
     
     const stateStr = JSON.stringify({
-      coins, scriptCost, grid, upgrades, hasUsedFreeDrop, stats, lastLoginDate, totalDaysLogged, lastSaveTime: Date.now(), lastTotalIncome: finalTotalIncome, completedContracts, lastPityDropTime, isPremium, isShadowbanned, encryptedWallet, seasonScripts, hasBattlePass, unlockedNodes, overclockEndTime, isZeroDayActive, zeroDayTimeLeft, zeroDayKeys, zeroDayArtifacts
+      coins, scriptCost, grid, upgrades, hasUsedFreeDrop, stats, lastLoginDate, totalDaysLogged, lastSaveTime: Date.now(), lastTotalIncome: finalTotalIncome, completedContracts, lastPityDropTime, isPremium, isShadowbanned, encryptedWallet, seasonScripts, hasBattlePass, unlockedNodes, overclockEndTime, isZeroDayActive, zeroDayTimeLeft, zeroDayKeys, zeroDayArtifacts, bitcoins, premiumAutoclickers
     });
     localStorage.setItem('hackerMergeState', stateStr);
     Preferences.set({ key: 'hackerMergeState', value: stateStr }).catch(() => {});
     const t = setTimeout(() => setIsSaving(false), 800);
     return () => clearTimeout(t);
-  }, [coins, scriptCost, grid, upgrades, hasUsedFreeDrop, stats, lastLoginDate, totalDaysLogged, finalTotalIncome, completedContracts, lastPityDropTime, isPremium, isShadowbanned, encryptedWallet, seasonScripts, hasBattlePass, unlockedNodes, overclockEndTime, isZeroDayActive, zeroDayTimeLeft, zeroDayKeys, zeroDayArtifacts]);
+  }, [coins, scriptCost, grid, upgrades, hasUsedFreeDrop, stats, lastLoginDate, totalDaysLogged, finalTotalIncome, completedContracts, lastPityDropTime, isPremium, isShadowbanned, encryptedWallet, seasonScripts, hasBattlePass, unlockedNodes, overclockEndTime, isZeroDayActive, zeroDayTimeLeft, zeroDayKeys, zeroDayArtifacts, bitcoins, premiumAutoclickers]);
 
   useEffect(() => {
     try {
@@ -834,10 +860,7 @@ function GameApp() {
     }, 2000);
   };
 
-  const handleManualAttack = (e: React.MouseEvent) => {
-    if ('Notification' in window && Notification.permission !== 'granted' && Notification.permission !== 'denied') {
-        Notification.requestPermission();
-    }
+  const executeAttack = () => {
     reportAction();
     vibrate(15);
     audio.play('click');
@@ -847,12 +870,11 @@ function GameApp() {
     
     shadowbanClicks.current.push(now);
     shadowbanClicks.current = shadowbanClicks.current.filter(t => now - t <= 1000);
-    if (shadowbanClicks.current.length > 30 && !isShadowbanned) {
+    if (shadowbanClicks.current.length > 150 && !isShadowbanned) {
         setIsShadowbanned(true);
     }
     
     registerClick(false);
-
     if (clickTimestamps.current.length >= 20 && !isOverdrive) {
         setIsOverdrive(true);
         vibrate([50, 50, 100, 50, 200]);
@@ -866,7 +888,6 @@ function GameApp() {
             clickTimestamps.current = [];
         }, 8000);
     }
-
     setCoins(prev => prev + finalClickPower);
     setEncryptedWallet(prev => prev + finalClickPower * 0.1);
     
@@ -886,7 +907,13 @@ function GameApp() {
         lifetimeBits: prev.lifetimeBits + finalClickPower,
         runBits: prev.runBits + finalClickPower
     }));
-    
+  };
+
+  const handleManualAttackMouse = (e: React.PointerEvent) => {
+    if ('Notification' in window && Notification.permission !== 'granted' && Notification.permission !== 'denied') {
+        Notification.requestPermission();
+    }
+    executeAttack();
     const id = floatingIdCounter.current++;
     const x = e.clientX + (Math.random() * 40 - 20);
     const y = e.clientY + (Math.random() * 20 - 20) - 20;
@@ -898,16 +925,18 @@ function GameApp() {
     }, 1000);
   };
 
-  const buyUpgrade = (key: keyof typeof upgrades, baseCost: number) => {
+  const buyUpgrade = (key: keyof typeof upgrades, baseCost: number, max?: number) => {
     reportAction();
-    const currentCost = Math.floor(baseCost * Math.pow(1.5, upgrades[key]));
+    const currentVal = upgrades[key] || 0;
+    if (max !== undefined && currentVal >= max) return;
+    const currentCost = Math.floor(baseCost * Math.pow(1.5, currentVal));
     if (coins < currentCost) {
       registerClick(true);
       return;
     }
     audio.play('click');
     setCoins(prev => prev - currentCost);
-    setUpgrades(prev => ({ ...prev, [key]: prev[key] + 1 }));
+    setUpgrades(prev => ({ ...prev, [key]: currentVal + 1 }));
     registerClick(false);
   };
 
@@ -1015,6 +1044,35 @@ function GameApp() {
             setDropTimer(prev => prev > 0 ? Math.max(0, prev - secondsPassed) : 0);
             setCasinoCooldown(prev => prev > 0 ? Math.max(0, prev - secondsPassed) : 0);
             setFrustrationIndex(prev => prev > 0 ? Math.max(0, prev - (5 * secondsPassed)) : 0);
+            if (premiumAutoclickers > 0) {
+                const autoClickGain = premiumAutoclickers * finalClickPower * secondsPassed;
+                setCoins(prev => prev + autoClickGain);
+                setEncryptedWallet(prev => prev + autoClickGain * 0.1);
+                setStats(prev => ({ 
+                    ...prev, 
+                    totalClicks: prev.totalClicks + (premiumAutoclickers * secondsPassed),
+                    lifetimeBits: prev.lifetimeBits + autoClickGain,
+                    runBits: prev.runBits + autoClickGain
+                }));
+                
+                if (!document.hidden && premiumAutoclickers > 0) {
+                    const id = Date.now() + Math.random();
+                    const btn = document.getElementById('manual-attack-btn');
+                    let x = window.innerWidth / 2;
+                    let y = window.innerHeight * 0.7;
+                    if (btn) {
+                        const rect = btn.getBoundingClientRect();
+                        x = rect.left + rect.width / 2;
+                        y = rect.top + rect.height / 2;
+                    }
+                    const tx = (Math.random() * 80 - 40);
+                    setFloatingTexts(prev => [...prev, { id, text: `+${formatNum(finalClickPower)} x${premiumAutoclickers}`, x, y, tx }]);
+                    setTimeout(() => {
+                      setFloatingTexts(prev => prev.filter(f => f.id !== id));
+                    }, 1000);
+                }
+            }
+
             setZeroDayTimeLeft(prev => {
                 if (prev > 0) {
                     const next = Math.max(0, prev - secondsPassed);
@@ -1030,7 +1088,7 @@ function GameApp() {
       }
     }, 50);
     return () => clearInterval(interval);
-  }, [finalTotalIncome, finalClickPower, isPremium, overclockEndTime]);
+  }, [finalTotalIncome, finalClickPower, isPremium, overclockEndTime, premiumAutoclickers]);
 
   useEffect(() => {
       if (frustrationIndex > 60 && !showPityModal && !isPityLoading) {
@@ -1061,6 +1119,49 @@ function GameApp() {
     }, 45000); // 45 seconds
     return () => clearInterval(interval);
   }, []);
+
+  useEffect(() => {
+    let timeout: NodeJS.Timeout;
+    const scheduleNext = () => {
+        const delay = 45000 + Math.random() * 45000;
+        timeout = setTimeout(() => {
+            const isBtc = Math.random() < 0.2;
+            const id = Date.now();
+            setFlyingVirus({
+                id,
+                top: 20 + Math.random() * 60,
+                duration: 6 + Math.random() * 4,
+                type: isBtc ? 'btc' : 'data'
+            });
+            
+            setTimeout(() => {
+                setFlyingVirus(prev => prev?.id === id ? null : prev);
+            }, 12000);
+            
+            scheduleNext();
+        }, delay);
+    };
+    scheduleNext();
+    return () => clearTimeout(timeout);
+  }, []);
+
+  const handleVirusClick = () => {
+    if (!flyingVirus) return;
+    vibrate(50);
+    audio.play('click');
+    
+    if (flyingVirus.type === 'btc') {
+        setBitcoins(prev => prev + 1);
+        addToast("Złapano Wirusa: +1 BITCOIN!", "gold");
+    } else {
+        const reward = (finalTotalIncome * 120) + 1000;
+        setCoins(prev => prev + reward);
+        addToast(`Złapano Wirusa: +${formatNum(reward)} B!`, "normal");
+    }
+    
+    setFlyingVirus(null);
+    triggerShake('heavy', 200);
+  };
 
   const handleBuy = () => {
     reportAction();
@@ -1160,10 +1261,11 @@ function GameApp() {
         newGrid[targetIndex] = { id: targetItem.id, level: nextLevel };
         newGrid[sourceIndex] = null;
         
-        setMergedIndex(targetIndex);
-        setTimeout(() => setMergedIndex(null), 300);
+        
         
         if (isJackpot) {
+            setMergedAnim({ index: targetIndex, type: 'jackpot' });
+            setTimeout(() => setMergedAnim(null), 1000);
             vibrate([50, 50, 100, 50, 200]);
             audio.play('jackpot');
             triggerShake('extreme', 1000);
@@ -1174,6 +1276,8 @@ function GameApp() {
             addToast("KRYTYCZNA KORUPCJA!!!", "critical");
             setRootMessage("Co ty narobiłeś...");
         } else if (isGold) {
+            setMergedAnim({ index: targetIndex, type: 'gold' });
+            setTimeout(() => setMergedAnim(null), 500);
             vibrate([50, 50, 150]);
             audio.play('merge');
             triggerShake('heavy', 500);
@@ -1181,6 +1285,8 @@ function GameApp() {
             if (isZeroDayActive) setZeroDayKeys(prev => prev + 500 + sourceItem.level * 2);
             setRootMessage("Podwójny skok. Niezłe kodowanie.");
         } else {
+            setMergedAnim({ index: targetIndex, type: 'normal' });
+            setTimeout(() => setMergedAnim(null), 300);
             vibrate(15);
             audio.play('merge');
             if (isZeroDayActive) setZeroDayKeys(prev => prev + sourceItem.level * 2);
@@ -1396,6 +1502,10 @@ function GameApp() {
         cryptoMiner: 0,
         trollFarm: 0,
         clickVirus: 0,
+        aiBotnet: 0,
+        quantumDecryptor: 0,
+        darkWebSyndicate: 0,
+        cyberDysonSphere: 0,
     });
     setCompletedContracts([]);
     setMarketTab('upgrades');
@@ -1415,6 +1525,24 @@ function GameApp() {
     } ${isOverdrive || shakeLevel === 'extreme' ? 'animate-perlin-extreme' : shakeLevel === 'heavy' ? 'animate-perlin-heavy' : ''} ${isDopamineCrash ? 'grayscale' : ''}`}>
       <style>{`
         .hide-scrollbar::-webkit-scrollbar { display: none; }
+        @keyframes fly-across {
+            0% { left: -100px; transform: scale(0.5) rotate(-45deg); opacity: 0; }
+            10% { opacity: 1; transform: scale(1.2) rotate(10deg); }
+            50% { transform: scale(1) rotate(180deg) translateY(-30px); }
+            90% { opacity: 1; transform: scale(1.2) rotate(340deg); }
+            100% { left: 100vw; transform: scale(0.5) rotate(400deg); opacity: 0; }
+        }
+        .animate-fly-across {
+            animation-name: fly-across;
+            animation-timing-function: linear;
+            animation-fill-mode: forwards;
+        }
+        @keyframes spin-slow {
+            100% { transform: rotate(360deg); }
+        }
+        .animate-spin-slow {
+            animation: spin-slow 3s linear infinite;
+        }
         @keyframes scanline {
             0% { transform: translateY(-100%); }
             100% { transform: translateY(100vh); }
@@ -1475,6 +1603,24 @@ function GameApp() {
           100% { clip-path: inset(40% 0 30% 0); }
         }
       `}</style>
+      
+      {flyingVirus && (
+          <button
+              key={flyingVirus.id}
+              onPointerDown={handleVirusClick}
+              className={`fixed z-[100] p-3 sm:p-4 rounded-full animate-fly-across backdrop-blur-md border touch-none cursor-pointer ${
+                  flyingVirus.type === 'btc' 
+                  ? 'text-orange-400 border-orange-500 bg-orange-900/60 shadow-[0_0_30px_rgba(249,115,22,0.8)]' 
+                  : 'text-red-400 border-red-500 bg-red-900/60 shadow-[0_0_30px_rgba(239,68,68,0.8)]'
+              }`}
+              style={{
+                  top: `${flyingVirus.top}%`,
+                  animationDuration: `${flyingVirus.duration}s`,
+              }}
+          >
+              {flyingVirus.type === 'btc' ? <Bitcoin className="w-8 h-8 sm:w-12 sm:h-12 animate-spin-slow" /> : <Bug className="w-8 h-8 sm:w-12 sm:h-12 animate-bounce" />}
+          </button>
+      )}
       <div className="pointer-events-none absolute inset-0 bg-[linear-gradient(rgba(18,16,16,0)_50%,rgba(0,0,0,0.25)_50%),linear-gradient(90deg,rgba(255,0,0,0.06),rgba(0,255,0,0.02),rgba(0,0,255,0.06))] bg-[length:100%_4px,3px_100%] z-0 opacity-40"></div>
       
       {isOverdrive && (
@@ -1522,7 +1668,10 @@ function GameApp() {
             }`}>
               Dzień {(totalDaysLogged + 1)} w Sieci!
             </h2>
-            <p className="text-emerald-500/80 text-sm mb-6">Odbierz swój codzienny przydział danych.</p>
+            <p className="text-emerald-500/80 text-sm mb-2">Odbierz swój codzienny przydział danych.</p>
+            <p className="text-cyan-400 font-bold text-xs mb-6 uppercase tracking-wider">
+                Odblokowano wizualizację fuzji V{((totalDaysLogged + 1) % 4) + 1}.0!
+            </p>
             
             <div className={`w-24 h-24 rounded-2xl flex flex-col items-center justify-center border mb-6 animate-pulse ${
                  (totalDaysLogged + 1) % 5 === 0 ? 'border-yellow-400 bg-yellow-900/50 text-yellow-300 shadow-[0_0_15px_rgba(234,179,8,0.5)]' :
@@ -2016,40 +2165,101 @@ function GameApp() {
                       desc="+5 kliku" 
                       baseCost={1000} 
                       count={upgrades.clickVirus} 
+                      max={50}
                       coins={coins}
                       icon={MousePointerClick}
                       animClass="animate-bounce text-emerald-400"
-                      onClick={() => buyUpgrade('clickVirus', 1000)} 
+                      onClick={() => buyUpgrade('clickVirus', 1000, 50)} 
                     />
                     <MarketItem 
                       title="Auto-Clicker" 
                       desc="10% klik/s" 
                       baseCost={1500}
                       count={upgrades.autoClicker} 
+                      max={50}
+                      isLocked={upgrades.clickVirus < 5}
+                      lockedReason="Wymaga: Wirus Wciskający poz. 5"
                       coins={coins}
                       icon={Bot}
                       animClass="animate-bounce text-blue-400"
-                      onClick={() => buyUpgrade('autoClicker', 1500)} 
+                      onClick={() => buyUpgrade('autoClicker', 1500, 50)} 
                     />
                     <MarketItem 
                       title="Koparka Krypto" 
                       desc="Zarobek x2" 
                       baseCost={20000} 
                       count={upgrades.cryptoMiner} 
+                      max={50}
+                      isLocked={upgrades.autoClicker < 10}
+                      lockedReason="Wymaga: Auto-Clicker poz. 10"
                       coins={coins}
                       icon={Cpu}
                       animClass="animate-[spin_3s_linear_infinite] text-purple-400"
-                      onClick={() => buyUpgrade('cryptoMiner', 20000)} 
+                      onClick={() => buyUpgrade('cryptoMiner', 20000, 50)} 
                     />
                     <MarketItem 
                       title="Farma Trolli" 
                       desc="Zarobek x5" 
                       baseCost={150000} 
                       count={upgrades.trollFarm} 
+                      max={50}
+                      isLocked={upgrades.cryptoMiner < 10}
+                      lockedReason="Wymaga: Koparka Krypto poz. 10"
                       coins={coins}
                       icon={Bug}
                       animClass="animate-pulse text-red-400"
-                      onClick={() => buyUpgrade('trollFarm', 150000)} 
+                      onClick={() => buyUpgrade('trollFarm', 150000, 50)} 
+                    />
+                    <MarketItem 
+                      title="Botnet AI" 
+                      desc="Zarobek x11" 
+                      baseCost={1000000} 
+                      count={upgrades.aiBotnet || 0} 
+                      max={50}
+                      isLocked={upgrades.trollFarm < 10}
+                      lockedReason="Wymaga: Farma Trolli poz. 10"
+                      coins={coins}
+                      icon={Network}
+                      animClass="animate-pulse text-indigo-400"
+                      onClick={() => buyUpgrade('aiBotnet', 1000000, 50)} 
+                    />
+                    <MarketItem 
+                      title="Dekryptor Kwantowy" 
+                      desc="Zarobek x26" 
+                      baseCost={5000000} 
+                      count={upgrades.quantumDecryptor || 0} 
+                      max={50}
+                      isLocked={(upgrades.aiBotnet || 0) < 10}
+                      lockedReason="Wymaga: Botnet AI poz. 10"
+                      coins={coins}
+                      icon={Binary}
+                      animClass="animate-bounce text-cyan-400"
+                      onClick={() => buyUpgrade('quantumDecryptor', 5000000, 50)} 
+                    />
+                    <MarketItem 
+                      title="Syndykat Dark Web" 
+                      desc="Zarobek x101" 
+                      baseCost={25000000} 
+                      count={upgrades.darkWebSyndicate || 0} 
+                      max={50}
+                      isLocked={(upgrades.quantumDecryptor || 0) < 10}
+                      lockedReason="Wymaga: Dekryptor Kwantowy poz. 10"
+                      coins={coins}
+                      icon={Ghost}
+                      animClass="animate-pulse text-rose-500"
+                      onClick={() => buyUpgrade('darkWebSyndicate', 25000000, 50)} 
+                    />
+                    <MarketItem 
+                      title="Cyber Sfera Dysona" 
+                      desc="Zarobek x501 (Brak limitu)" 
+                      baseCost={100000000} 
+                      count={upgrades.cyberDysonSphere || 0} 
+                      isLocked={(upgrades.darkWebSyndicate || 0) < 10}
+                      lockedReason="Wymaga: Syndykat Dark Web poz. 10"
+                      coins={coins}
+                      icon={Orbit}
+                      animClass="animate-[spin_4s_linear_infinite] text-yellow-400"
+                      onClick={() => buyUpgrade('cyberDysonSphere', 100000000)} 
                     />
                   </div>
               ) : marketTab === 'prestige' ? (
@@ -2183,6 +2393,40 @@ function GameApp() {
                                  Zautoryzowano
                              </div>
                          )}
+                     </div>
+                     
+                     <div className="bg-orange-900/20 border border-orange-500/50 rounded-xl p-4 flex flex-col gap-4">
+                         <h3 className="text-orange-400 font-bold uppercase flex items-center gap-2">
+                             <Bitcoin className="w-5 h-5" /> Dark Web Autoclicker
+                         </h3>
+                         <p className="text-orange-300/70 text-xs font-medium">
+                             Premium Autoclicker. Fizycznie klika przycisk MANUALNY ATAK z prędkością 1 kliknięcie/sekundę za każdy posiadany egzemplarz!
+                         </p>
+                         <div className="flex justify-between items-center bg-black/40 p-2 rounded-lg border border-orange-900/40">
+                             <span className="text-xs text-orange-400">Posiadasz: <span className="font-bold text-orange-300">{premiumAutoclickers}</span> szt.</span>
+                             <span className="text-xs text-orange-400">Zysk: <span className="font-bold text-orange-300">{premiumAutoclickers}x</span> klik/s</span>
+                         </div>
+                         <button
+                           disabled={bitcoins < 1}
+                           data-locked={bitcoins < 1 ? 'true' : 'false'}
+                           onClick={() => {
+                               if (bitcoins >= 1) {
+                                   audio.play('click');
+                                   setBitcoins(b => b - 1);
+                                   setPremiumAutoclickers(p => p + 1);
+                                   addToast('Zakupiono Dark Web Autoclicker!', 'gold');
+                               }
+                           }}
+                           className={`mt-2 w-full py-3 rounded-lg border font-bold uppercase transition-colors ${
+                               bitcoins >= 1 
+                               ? 'border-orange-500 bg-orange-600/20 text-orange-400 hover:bg-orange-500/30' 
+                               : 'border-orange-900/30 bg-orange-950/20 text-orange-900 cursor-not-allowed'
+                           }`}
+                         >
+                             <span className="flex items-center justify-center gap-2">
+                                <ShoppingCart className="w-4 h-4" /> Kup Autoclicker (1 DarkCoin)
+                             </span>
+                         </button>
                      </div>
                   </div>
               ) : marketTab === 'zeroday' && isZeroDayActive ? (
@@ -2447,9 +2691,9 @@ function GameApp() {
 
               <div className="text-center text-xs sm:text-sm font-mono text-emerald-500 mb-4 bg-emerald-950/20 border border-emerald-900/50 p-2 rounded-lg">
                   PENETRACJA SIECI: [{(() => {
-                      const filled = Math.floor((unlockedNodes.length / 12) * 10);
+                      const filled = Math.floor((unlockedNodes.length / 24) * 10);
                       return '█'.repeat(filled) + '-'.repeat(10 - filled);
-                  })()}] {Math.floor((unlockedNodes.length / 12) * 100)}%
+                  })()}] {Math.floor((unlockedNodes.length / 24) * 100)}%
                   <div className="mt-2 text-emerald-300 font-sans">
                       Złośliwe Skrypty: <span className="font-bold text-emerald-400">{seasonScripts}</span>
                   </div>
@@ -2468,11 +2712,13 @@ function GameApp() {
                   </button>
               )}
 
-              <div className="grid grid-cols-3 gap-2 sm:gap-3">
-                  {Array.from({ length: 12 }).map((_, index) => {
-                      const isPremiumNode = index >= 8;
+              <div className="grid grid-cols-4 gap-2 sm:gap-3">
+                  {Array.from({ length: 24 }).map((_, index) => {
+                      const isPremiumNode = index >= 16;
                       const isUnlocked = unlockedNodes.includes(index);
                       
+                      const nodeCost = Math.floor(10 * Math.pow(1.3, unlockedNodes.length));
+
                       return (
                           <button
                               key={index}
@@ -2484,13 +2730,13 @@ function GameApp() {
                                       addToast("Zabezpieczenia Wojskowe! Wymagany Kod ROOT!", "error");
                                       return;
                                   }
-                                  if (seasonScripts < 10) {
-                                      addToast("Brak Złośliwych Skryptów (Wymagane 10)!", "error");
+                                  if (seasonScripts < nodeCost) {
+                                      addToast(`Brak Złośliwych Skryptów (Wymagane ${nodeCost})!`, "error");
                                       return;
                                   }
                                   
                                   audio.play('click');
-                                  setSeasonScripts(s => s - 10);
+                                  setSeasonScripts(s => s - nodeCost);
                                   setUnlockedNodes(prev => [...prev, index]);
                                   
                                   if (isPremiumNode) {
@@ -2515,21 +2761,14 @@ function GameApp() {
                                       : 'border-emerald-900/50 bg-slate-900/50 text-emerald-700/80 hover:bg-emerald-900/30 hover:text-emerald-500 active:scale-95')
                               }`}
                           >
-                              {isUnlocked ? (
-                                  <>
-                                      <Unlock className={`w-5 h-5 sm:w-6 sm:h-6 ${isPremiumNode ? 'text-fuchsia-400' : 'text-emerald-400'}`} />
-                                      <span className="text-[8px] sm:text-[10px] font-bold uppercase tracking-wider text-center">Zhakowany</span>
-                                  </>
-                              ) : isPremiumNode ? (
-                                  <>
-                                      <Lock className="w-5 h-5 sm:w-6 sm:h-6 text-red-500" />
-                                      <span className="text-[8px] sm:text-[10px] font-bold uppercase text-center text-purple-300">Wojskowy<br/>(10 Skryptów)</span>
-                                  </>
-                              ) : (
-                                  <>
-                                      <Globe className="w-5 h-5 sm:w-6 sm:h-6 opacity-60" />
-                                      <span className="text-[8px] sm:text-[10px] font-bold uppercase text-center">Węzeł<br/>(10 Skryptów)</span>
-                                  </>
+                              {isUnlocked ? <Unlock className="w-5 h-5 sm:w-6 sm:h-6" /> : isPremiumNode ? <Lock className="w-5 h-5 sm:w-6 sm:h-6 text-purple-500/50" /> : <Radar className="w-5 h-5 sm:w-6 sm:h-6 opacity-50" />}
+                              <span className="text-[9px] sm:text-[10px] font-bold text-center leading-none">
+                                  {isUnlocked ? 'PRZEJĘTY' : isPremiumNode ? 'SEKTOR MILITARY' : 'SEKTOR CYWIL'}
+                              </span>
+                              {!isUnlocked && (
+                                <span className="text-[8px] sm:text-[9px] opacity-70 mt-1">
+                                  Koszt: {nodeCost}
+                                </span>
                               )}
                           </button>
                       );
@@ -2631,8 +2870,21 @@ function GameApp() {
           </div>
         </div>
         <div className="flex flex-row justify-between items-center text-xs sm:text-sm gap-2 bg-black/40 px-2 py-1 rounded-lg border border-emerald-900/40">
-          <div className="font-bold">
-            Bity: <span className="text-emerald-300">{formatNum(Math.floor(coins))}</span>
+          <div className="flex gap-3">
+             <div className="font-bold">
+               Bity: <span className="text-emerald-300">{formatNum(Math.floor(coins))}</span>
+             </div>
+             {bitcoins > 0 && (
+                <div className="font-bold flex items-center gap-1 group relative cursor-help">
+                   <Bitcoin className="w-3.5 h-3.5 text-orange-400" />
+                   <span className="text-orange-400">{formatNum(Math.floor(bitcoins))}</span>
+                   <div className="absolute top-full left-0 mt-1 w-48 p-2 bg-black/90 border border-orange-500/50 rounded-lg text-[10px] text-orange-300 opacity-0 pointer-events-none group-hover:opacity-100 transition-opacity z-50">
+                       <span className="font-bold block mb-1">DarkCoins (Premium)</span>
+                       Każdy coin zwiększa pasywne kopanie oraz kliknięcie o stałe +5%.
+                       Obecny bonus: +{(bitcoins * 5).toFixed(0)}%
+                   </div>
+                </div>
+             )}
           </div>
           <div>
             Kopanie: <span className="text-emerald-300">{formatNum(finalTotalIncome)}</span>/s
@@ -2648,7 +2900,7 @@ function GameApp() {
             audio.play('click');
             reportAction();
         }}
-        className={`w-full max-w-lg mb-1 border rounded-xl p-2 bg-black/60 backdrop-blur-md relative z-10 flex items-center gap-3 transition-colors duration-300 cursor-pointer active:scale-95 active:animate-bounce ${isOverdrive ? 'border-red-500/50 shadow-[0_0_15px_rgba(239,68,68,0.3)] animate-pulse' : (isPremium ? 'border-cyan-500/30 shadow-[0_0_10px_rgba(6,182,212,0.1)] hover:border-cyan-400/50' : 'border-emerald-500/30 shadow-[0_0_10px_rgba(16,185,129,0.1)] hover:border-emerald-400/50')}`}
+        className={`w-full max-w-lg mb-0.5 border rounded-lg p-1.5 bg-black/60 backdrop-blur-md relative z-10 flex items-center gap-3 transition-colors duration-300 cursor-pointer active:scale-95 active:animate-bounce ${isOverdrive ? 'border-red-500/50 shadow-[0_0_15px_rgba(239,68,68,0.3)] animate-pulse' : (isPremium ? 'border-cyan-500/30 shadow-[0_0_10px_rgba(6,182,212,0.1)] hover:border-cyan-400/50' : 'border-emerald-500/30 shadow-[0_0_10px_rgba(16,185,129,0.1)] hover:border-emerald-400/50')}`}
       >
           <div className={`p-1.5 rounded-lg border ${isOverdrive ? 'bg-red-900/50 border-red-500 text-red-400' : (isPremium ? 'bg-cyan-900/30 border-cyan-500/50 text-cyan-400' : 'bg-emerald-900/30 border-emerald-500/50 text-emerald-400')}`}>
               <Skull className="w-5 h-5" style={(!isPremium || isOverdrive) ? { filter: 'drop-shadow(-2px 0px 0px rgba(0,255,255,0.5)) drop-shadow(2px 0px 0px rgba(255,0,0,0.5))' } : {}} />
@@ -2674,10 +2926,11 @@ function GameApp() {
       <div className="flex items-center justify-center relative z-10 mb-1 w-full max-w-lg flex-1 min-h-0 min-w-0">
         <div 
           className="grid grid-cols-4 gap-1 sm:gap-1.5 p-1.5 sm:p-2 border border-emerald-500/20 rounded-2xl bg-black/40 backdrop-blur-md shadow-[0_0_20px_rgba(0,0,0,0.5)] mx-auto min-h-0 min-w-0"
-          style={{ height: '100%', maxHeight: '380px', maxWidth: '100%', aspectRatio: '1/1' }}
+          style={{ height: '100%', maxHeight: '400px', maxWidth: '100%', aspectRatio: '1/1' }}
         >
           {grid.map((slot, index) => {
-            const isMerged = mergedIndex === index;
+            const isMerged = mergedAnim?.index === index;
+            const mergeType = isMerged ? mergedAnim.type : null;
             const config = slot ? getLevelConfig(slot.level) : null;
             const Icon = config ? config.icon : null;
             return (
@@ -2698,7 +2951,9 @@ function GameApp() {
                     onTouchEnd={handleTouchEnd}
                     className={`absolute inset-0 sm:inset-0.5 border border-emerald-500/30 rounded-xl bg-slate-900/80 flex flex-col items-center justify-center cursor-grab active:cursor-grabbing hover:bg-emerald-900/30 hover:border-emerald-500/50 shadow-inner touch-none ${
                       isMerged 
-                        ? 'scale-[1.25] brightness-200 ring-2 ring-emerald-400 z-50 transition-all duration-200' 
+                        ? (mergeType === 'jackpot' ? 'scale-[1.6] rotate-[360deg] blur-[1px] brightness-200 ring-4 ring-red-500 shadow-[0_0_50px_#ef4444] z-[60] transition-all duration-1000 animate-pulse'
+                          : mergeType === 'gold' ? 'scale-[1.3] rotate-12 ring-2 ring-yellow-400 drop-shadow-[0_0_30px_#eab308] z-50 transition-all duration-500'
+                          : 'scale-[1.25] brightness-200 ring-2 ring-emerald-400 z-50 transition-all duration-200')
                         : 'idle-float transition-all duration-300'
                     }`}
                     style={{ animationDelay: `${index * 0.15}s` }}
@@ -2717,7 +2972,7 @@ function GameApp() {
       </div>
 
       {/* Drop / Terminal Log */}
-      <div className="w-full max-w-lg flex flex-col items-center flex-shrink-0 relative z-10 gap-1 mb-1">
+      <div className="w-full max-w-lg flex flex-col items-center flex-shrink-0 relative z-10 gap-0.5 mb-0.5">
         
         <div className="w-full text-[9px] sm:text-[10px] text-emerald-500/60 flex items-center gap-2 px-2 overflow-hidden bg-black/20 rounded-lg py-0.5 border border-emerald-900/30">
           <span className="animate-pulse">{'>_'}</span>
@@ -2741,14 +2996,15 @@ function GameApp() {
 
       {/* Attack Button */}
       <button
-        onClick={handleManualAttack}
-        className={`w-full max-w-lg mb-0.5 relative z-10 px-2 py-1.5 sm:py-2 rounded-xl border backdrop-blur-sm font-bold text-sm sm:text-base uppercase tracking-widest flex-shrink-0 flex items-center justify-center gap-2 select-none transition-[transform,background-color,box-shadow,border-color] duration-200 ease-[cubic-bezier(0.8,-0.5,0.2,1.8)] active:scale-y-[0.85] active:scale-x-[1.05] ${
+        id="manual-attack-btn"
+        onPointerDown={handleManualAttackMouse}
+        className={`touch-manipulation w-full max-w-lg mb-0.5 relative z-10 px-4 py-3 sm:py-4 rounded-xl border-2 backdrop-blur-sm font-black text-lg sm:text-xl uppercase tracking-[0.15em] flex-shrink-0 flex items-center justify-center gap-2 select-none transition-[transform,background-color,box-shadow,border-color] duration-200 ease-[cubic-bezier(0.8,-0.5,0.2,1.8)] active:scale-y-[0.9] active:scale-x-[1.02] ${
             isOverdrive 
-            ? 'border-red-500 bg-red-600 text-black shadow-[0_0_30px_rgba(239,68,68,0.8)] animate-pulse'
-            : 'border-emerald-500/50 bg-emerald-950/40 text-emerald-400 shadow-[0_0_10px_rgba(16,185,129,0.2)] hover:shadow-[0_0_20px_rgba(16,185,129,0.4)] hover:bg-emerald-900/60 active:bg-emerald-600 active:text-black cursor-pointer'
+            ? 'border-red-500 bg-red-600 text-black shadow-[0_0_40px_rgba(239,68,68,1)] animate-pulse'
+            : 'border-emerald-500/50 bg-emerald-950/60 text-emerald-400 shadow-[0_0_15px_rgba(16,185,129,0.3)] hover:shadow-[0_0_30px_rgba(16,185,129,0.5)] hover:bg-emerald-900/80 active:bg-emerald-500 active:text-black cursor-pointer'
         }`}
       >
-        <Zap className="w-4 h-4 sm:w-5 sm:h-5" /> [ MANUALNY ATAK ] (+{formatNum(finalClickPower)})
+        <Zap className="w-5 h-5 sm:w-6 sm:h-6" /> [ MANUALNY ATAK ] (+{formatNum(finalClickPower)})
       </button>
 
       {/* Overclock Shortcut */}
@@ -2767,12 +3023,12 @@ function GameApp() {
       )}
 
       {/* Footer / Buy Script */}
-      <div className="w-full max-w-lg flex flex-col items-center flex-shrink-0 pb-1 relative z-10">
+      <div className="w-full max-w-lg flex flex-col items-center flex-shrink-0 relative z-10 mt-auto">
         <button
           onClick={handleBuy}
           disabled={!canBuy}
           data-locked={!canBuy ? 'true' : 'false'}
-          className={`w-full rounded-xl relative z-10 px-4 py-1.5 sm:py-2 border font-bold text-sm sm:text-base transition-all uppercase tracking-wider shadow-lg ${
+          className={`w-full rounded-lg relative z-10 px-2 py-1 sm:py-1.5 border font-bold text-sm transition-all uppercase tracking-wider shadow-lg ${
             canBuy 
               ? 'border-emerald-500/80 text-emerald-950 bg-emerald-500 hover:bg-emerald-400 hover:shadow-[0_0_20px_rgba(16,185,129,0.5)] cursor-pointer' 
               : 'border-emerald-900/50 text-emerald-800 bg-emerald-950/20 active:scale-95'
@@ -2781,7 +3037,7 @@ function GameApp() {
           Kompiluj Skrypt ({formatNum(scriptCost)})
         </button>
         
-        <div className="h-4 mt-0.5 flex items-center justify-between w-full px-2">
+        <div className="h-3 flex items-center justify-between w-full px-2">
           <div className="flex-1"></div>
           <div className="flex-1 flex justify-center">
             {!hasEmptySlot && (
@@ -2807,34 +3063,61 @@ function GameApp() {
   );
 }
 
-function MarketItem({ title, desc, baseCost, count, icon: Icon, animClass, coins, onClick }: any) {
+function MarketItem({ title, desc, baseCost, count, icon: Icon, animClass, coins, onClick, max, isLocked, lockedReason, maxBuffDesc }: any) {
+  const isMaxed = max !== undefined && count >= max;
   const currentCost = Math.floor(baseCost * Math.pow(1.5, count));
-  const canAfford = coins >= currentCost;
+  const canAfford = coins >= currentCost && !isMaxed && !isLocked;
+  
+  const progressPercent = max ? Math.min(100, Math.floor((count / max) * 100)) : 0;
   
   return (
     <button 
-      onClick={onClick}
-      disabled={!canAfford}
-      data-locked={!canAfford ? 'true' : 'false'}
-      className={`w-full rounded-xl border p-3 flex items-center justify-between transition-all ${
-        canAfford 
+      onClick={isLocked || isMaxed ? undefined : onClick}
+      disabled={!canAfford && !isMaxed && !isLocked}
+      data-locked={isLocked ? 'true' : (!canAfford && !isMaxed ? 'true' : 'false')}
+      className={`w-full rounded-xl border p-3 flex flex-col gap-2 transition-all relative overflow-hidden group ${
+        isLocked 
+          ? 'border-slate-800 text-slate-600 bg-slate-900/30 cursor-not-allowed opacity-60'
+          : isMaxed
+          ? 'border-fuchsia-500/60 text-fuchsia-400 bg-fuchsia-900/20 shadow-[0_0_15px_rgba(217,70,239,0.3)]'
+          : canAfford 
           ? 'border-emerald-500/40 text-emerald-400 bg-black/40 backdrop-blur-md hover:bg-emerald-900/40 cursor-pointer active:scale-95 hover:border-emerald-500/60' 
           : 'border-emerald-900/30 text-emerald-800 bg-black/20 hover:bg-black/40 active:scale-95'
       }`}
     >
-      <div className="flex items-center gap-3">
-        <div className={`p-2 rounded-lg bg-black/50 border border-emerald-900/30 ${count > 0 ? animClass : 'opacity-50'}`}>
-           <Icon className="w-6 h-6" />
-        </div>
-        <div className="flex flex-col items-start">
-            <span className="font-bold text-sm sm:text-base">{title}</span>
-            <span className="text-[10px] sm:text-xs opacity-70">{desc}</span>
-        </div>
+      {isMaxed && (
+          <div className="absolute inset-0 bg-gradient-to-r from-fuchsia-600/10 via-yellow-500/10 to-fuchsia-600/10 animate-pulse pointer-events-none" />
+      )}
+      <div className="flex items-center justify-between w-full relative z-10">
+          <div className="flex items-center gap-3">
+            <div className={`p-2 rounded-lg bg-black/50 border ${isLocked ? 'border-slate-800' : isMaxed ? 'border-fuchsia-500/50 shadow-[0_0_10px_rgba(217,70,239,0.5)]' : 'border-emerald-900/30'} ${count > 0 && !isLocked ? (isMaxed ? 'text-yellow-400' : animClass) : 'opacity-50'}`}>
+               {isLocked ? <Lock className="w-6 h-6" /> : <Icon className="w-6 h-6" />}
+            </div>
+            <div className="flex flex-col items-start text-left">
+                <span className="font-bold text-sm sm:text-base flex items-center gap-2">
+                   {title}
+                </span>
+                <span className={`text-[10px] sm:text-xs opacity-70 ${isMaxed ? 'text-fuchsia-300 font-bold' : ''}`}>
+                   {isLocked ? lockedReason : isMaxed && maxBuffDesc ? `MAX: ${maxBuffDesc}` : desc}
+                </span>
+            </div>
+          </div>
+          <div className="flex flex-col items-end">
+              <span className={`font-bold text-sm sm:text-base ${isLocked ? 'text-slate-600' : isMaxed ? 'text-yellow-400 drop-shadow-[0_0_5px_rgba(234,179,8,0.8)]' : 'text-emerald-300'}`}>
+                 {isLocked ? 'ZABLOKOWANE' : isMaxed ? 'MASTER' : `${formatNum(currentCost)} B`}
+              </span>
+              {!isLocked && <span className="text-[10px] sm:text-xs opacity-70">Posiadasz: {count}{max ? `/${max}` : ''} szt.</span>}
+          </div>
       </div>
-      <div className="flex flex-col items-end">
-          <span className="font-bold text-sm sm:text-base text-emerald-300">{formatNum(currentCost)} B</span>
-          <span className="text-[10px] sm:text-xs opacity-70">Posiadasz: {count} szt.</span>
-      </div>
+      
+      {max && !isLocked && (
+          <div className="w-full h-1.5 bg-black/50 rounded-full overflow-hidden mt-1 relative z-10">
+              <div 
+                  className={`h-full transition-all duration-500 ${isMaxed ? 'bg-gradient-to-r from-fuchsia-500 to-yellow-400 shadow-[0_0_10px_rgba(234,179,8,0.8)]' : 'bg-emerald-500/50'}`}
+                  style={{ width: `${progressPercent}%` }}
+              />
+          </div>
+      )}
     </button>
   );
 }
