@@ -1152,7 +1152,7 @@ function GameApp() {
     
     if (flyingVirus.type === 'btc') {
         setBitcoins(prev => prev + 1);
-        addToast("Złapano Wirusa: +1 BITCOIN!", "gold");
+        addToast("Złapano Wirusa: +1 DARKCOIN!", "gold");
     } else {
         const reward = (finalTotalIncome * 120) + 1000;
         setCoins(prev => prev + reward);
