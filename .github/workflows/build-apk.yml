@@ -1,0 +1,70 @@
+name: Build and Release APK
+
+on:
+  push:
+    tags:
+      - 'v*' # Uruchamia się automatycznie po wypchnięciu tagu wersji, np. v1.0.0
+  workflow_dispatch: # Pozwala na ręczne uruchomienie z panelu Actions
+
+jobs:
+  build:
+    name: Build APK
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      # 1. Środowisko Node.js (do zbudowania webowej wersji Vite)
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+
+      - name: Install Dependencies
+        run: npm ci
+
+      - name: Build Web App
+        run: npm run build
+
+      # (Opcjonalnie) Jeśli używasz Capacitora, zsynchronizuj pliki webowe z Androidem
+      - name: Sync Capacitor (if exists)
+        run: |
+          if [ -d "android" ] && grep -q "@capacitor/cli" package.json; then
+            npx cap sync android
+          fi
+
+      # 2. Środowisko Java dla Android Studio / Gradle
+      - name: Setup Java JDK
+        uses: actions/setup-java@v4
+        with:
+          java-version: '17'
+          distribution: 'temurin'
+          cache: 'gradle'
+
+      # 3. Nadanie uprawnień i kompilacja APK w katalogu android
+      - name: Build APK with Gradle
+        working-directory: ./android
+        run: |
+          chmod +x gradlew
+          ./gradlew assembleDebug
+
+      # 4. Upload jako Artefakt w logach Actions
+      - name: Upload APK Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: hacker-merge-apk
+          path: android/app/build/outputs/apk/debug/app-debug.apk
+
+      # 5. Publikacja APK do zakładki "Releases" na GitHubie (jeśli wypchnięto tag)
+      - name: Create Release and Upload APK
+        uses: softprops/action-gh-release@v2
+        if: startsWith(github.ref, 'refs/tags/')
+        with:
+          files: android/app/build/outputs/apk/debug/app-debug.apk
+          name: Hacker Merge ${{ github.ref_name }}
+          draft: false
+          prerelease: false
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

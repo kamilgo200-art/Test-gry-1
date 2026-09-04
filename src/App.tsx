@@ -46,6 +46,8 @@ import {
   Star,
   Orbit,
   Bitcoin,
+  MessageSquare,
+  Send,
 } from 'lucide-react';
 
 type Item = {
@@ -476,6 +478,16 @@ export default function App() {
   return <GameApp />;
 }
 
+const TutorialTooltip = ({ children, arrow = 'down' }: { children: React.ReactNode, arrow?: 'up' | 'down' | 'left' | 'right' }) => (
+  <div className="absolute z-[200] bg-cyan-900 border-2 border-cyan-400 text-cyan-100 p-3 rounded-xl shadow-[0_0_20px_rgba(34,211,238,0.8)] text-xs sm:text-sm font-bold tracking-wide animate-bounce pointer-events-none w-max max-w-[220px] text-center">
+      {children}
+      <div className={`absolute w-3 h-3 bg-cyan-900 border-cyan-400 transform rotate-45 ${
+          arrow === 'down' ? 'bottom-[-7px] left-1/2 -translate-x-1/2 border-b-2 border-r-2' : 
+          arrow === 'up' ? 'top-[-7px] left-1/2 -translate-x-1/2 border-t-2 border-l-2' : ''
+      }`} />
+  </div>
+);
+
 function GameApp() {
   const [notationState, setNotationState] = useState(globalNotation);
   const [coins, setCoins] = useState<number>(() => getInitialState('coins', 0));
@@ -495,6 +507,9 @@ function GameApp() {
     cyberDysonSphere: 0,
   }));
   const [hasUsedFreeDrop, setHasUsedFreeDrop] = useState<boolean>(() => getInitialState('hasUsedFreeDrop', false));
+  const [hasSubmittedFeedback, setHasSubmittedFeedback] = useState<boolean>(() => getInitialState('hasSubmittedFeedback', false));
+  const [tutorialStep, setTutorialStep] = useState<number>(() => getInitialState('tutorialStep', 0));
+  const [feedbackText, setFeedbackText] = useState('');
   
   // STATS
   const [stats, setStats] = useState<Stats>(() => {
@@ -547,7 +562,7 @@ function GameApp() {
   const [verifyingContracts, setVerifyingContracts] = useState<string[]>([]);
   const [hackerEvent, setHackerEvent] = useState<{name: string, isOpen: boolean, isHacking: boolean} | null>(null);
   
-  const [activeModal, setActiveModal] = useState<'market' | 'casino' | 'siatka' | 'settings' | 'privacy' | null>(null);
+  const [activeModal, setActiveModal] = useState<'market' | 'casino' | 'siatka' | 'settings' | 'privacy' | 'feedback' | null>(null);
   const [showLeaderboard, setShowLeaderboard] = useState(false);
   const [offlineEarnings, setOfflineEarnings] = useState<{seconds: number, amount: number} | null>(null);
 
@@ -596,6 +611,16 @@ function GameApp() {
   useEffect(() => {
     currentCoinsRef.current = coins;
   }, [coins]);
+
+  
+  useEffect(() => {
+     if (stats.totalClicks > 50 && tutorialStep < 5) setTutorialStep(5);
+     else if (tutorialStep === 0 && coins >= scriptCost) setTutorialStep(1);
+     else if (tutorialStep === 1 && grid.filter(s => s !== null).length >= 1) setTutorialStep(2);
+     else if (tutorialStep === 2 && grid.filter(s => s !== null).length >= 2) setTutorialStep(3);
+     else if (tutorialStep === 3 && grid.some(s => s !== null && s.level >= 2)) setTutorialStep(4);
+     else if (tutorialStep === 4 && activeModal === 'market') setTutorialStep(5);
+  }, [tutorialStep, coins, scriptCost, grid, activeModal]);
 
   // FRUSTRATION & PITY
   const [frustrationIndex, setFrustrationIndex] = useState(0);
@@ -776,13 +801,13 @@ function GameApp() {
     }
     
     const stateStr = JSON.stringify({
-      coins, scriptCost, grid, upgrades, hasUsedFreeDrop, stats, lastLoginDate, totalDaysLogged, lastSaveTime: Date.now(), lastTotalIncome: finalTotalIncome, completedContracts, lastPityDropTime, isPremium, isShadowbanned, encryptedWallet, seasonScripts, hasBattlePass, unlockedNodes, overclockEndTime, isZeroDayActive, zeroDayTimeLeft, zeroDayKeys, zeroDayArtifacts, bitcoins, premiumAutoclickers
+      coins, scriptCost, grid, upgrades, hasUsedFreeDrop, stats, lastLoginDate, totalDaysLogged, lastSaveTime: Date.now(), lastTotalIncome: finalTotalIncome, completedContracts, lastPityDropTime, isPremium, isShadowbanned, encryptedWallet, seasonScripts, hasBattlePass, unlockedNodes, overclockEndTime, isZeroDayActive, zeroDayTimeLeft, zeroDayKeys, zeroDayArtifacts, bitcoins, premiumAutoclickers, hasSubmittedFeedback, tutorialStep
     });
     localStorage.setItem('hackerMergeState', stateStr);
     Preferences.set({ key: 'hackerMergeState', value: stateStr }).catch(() => {});
     const t = setTimeout(() => setIsSaving(false), 800);
     return () => clearTimeout(t);
-  }, [coins, scriptCost, grid, upgrades, hasUsedFreeDrop, stats, lastLoginDate, totalDaysLogged, finalTotalIncome, completedContracts, lastPityDropTime, isPremium, isShadowbanned, encryptedWallet, seasonScripts, hasBattlePass, unlockedNodes, overclockEndTime, isZeroDayActive, zeroDayTimeLeft, zeroDayKeys, zeroDayArtifacts, bitcoins, premiumAutoclickers]);
+  }, [coins, scriptCost, grid, upgrades, hasUsedFreeDrop, stats, lastLoginDate, totalDaysLogged, finalTotalIncome, completedContracts, lastPityDropTime, isPremium, isShadowbanned, encryptedWallet, seasonScripts, hasBattlePass, unlockedNodes, overclockEndTime, isZeroDayActive, zeroDayTimeLeft, zeroDayKeys, zeroDayArtifacts, bitcoins, premiumAutoclickers, hasSubmittedFeedback, tutorialStep]);
 
   useEffect(() => {
     try {
@@ -2587,14 +2612,81 @@ function GameApp() {
                       </button>
                   </div>
                   
-                  <div className="mt-6 flex justify-center">
+                  <div className="mt-4 flex flex-col items-center gap-2">
+                      <button 
+                          onClick={() => window.open('https://play.google.com/store/apps/details?id=com.hackermerge.game', '_blank')}
+                          className="w-full py-2 bg-yellow-600/20 text-yellow-400 border border-yellow-500/50 rounded-lg font-bold hover:bg-yellow-500/30 active:scale-95 transition-all flex items-center justify-center gap-2"
+                      >
+                          <Star className="w-4 h-4" /> OCEŃ GRĘ (GOOGLE PLAY)
+                      </button>
+                      <button 
+                          onClick={() => window.open('https://discord.gg/hackermerge', '_blank')}
+                          className="w-full py-2 bg-indigo-600/20 text-indigo-400 border border-indigo-500/50 rounded-lg font-bold hover:bg-indigo-500/30 active:scale-95 transition-all flex items-center justify-center gap-2"
+                      >
+                          <MessageSquare className="w-4 h-4" /> SPOŁECZNOŚĆ (DISCORD)
+                      </button>
+                      <button 
+                          onClick={() => setActiveModal('feedback')}
+                          className="w-full py-2 bg-blue-600/20 text-blue-400 border border-blue-500/50 rounded-lg font-bold hover:bg-blue-500/30 active:scale-95 transition-all flex items-center justify-center gap-2"
+                      >
+                          <MessageSquare className="w-4 h-4" /> ZGŁOŚ UWAGI {hasSubmittedFeedback ? '' : '(+5 DARKCOINÓW)'}
+                      </button>
                       <button 
                           onClick={() => setActiveModal('privacy')}
-                          className="text-[10px] text-emerald-500/50 hover:text-emerald-400 underline underline-offset-2 transition-colors uppercase tracking-wider"
+                          className="text-[10px] text-emerald-500/50 hover:text-emerald-400 underline underline-offset-2 transition-colors uppercase tracking-wider mt-2"
                       >
                           Polityka Prywatności
                       </button>
                   </div>
+              </div>
+           </div>
+        </div>
+      )}
+
+      
+      {/* Feedback Modal */}
+      {activeModal === 'feedback' && (
+        <div className="fixed inset-0 z-[50] bg-slate-950/95 flex flex-col items-center justify-center p-4 pb-24 overflow-y-auto w-full" onClick={(e) => { if (e.target === e.currentTarget) setActiveModal(null) }}>
+           <div className="w-full max-w-md rounded-2xl border border-blue-500/50 bg-slate-900 p-6 flex flex-col relative">
+              <button onClick={() => setActiveModal(null)} className="absolute top-4 right-4 text-blue-500/50 hover:text-blue-400"><X size={24}/></button>
+              <h2 className="text-xl font-bold text-blue-400 uppercase tracking-widest mb-4 border-b border-blue-500/30 pb-2 flex items-center gap-2">
+                 <MessageSquare className="w-5 h-5"/> Feedback
+              </h2>
+              
+              <div className="w-full flex flex-col gap-4 text-blue-100 text-sm">
+                  <div className="bg-red-900/30 border border-red-500/50 p-3 rounded-lg text-red-300 text-xs text-center font-medium">
+                      Prosimy o szczere opinie! Zastrzeżenie: Nie wpisuj tu żadnych danych osobowych (np. imienia, e-maila, numeru telefonu). Wysyłany formularz jest w 100% anonimowy.
+                  </div>
+                  <textarea 
+                      value={feedbackText}
+                      onChange={(e) => setFeedbackText(e.target.value)}
+                      placeholder="Co myślisz o grze? Czego brakuje? Znalazłeś jakieś błędy?"
+                      className="w-full h-32 bg-slate-950 border border-blue-500/50 rounded-lg p-3 text-sm text-emerald-400 focus:outline-none focus:border-blue-400 resize-none custom-scrollbar"
+                  />
+                  <button 
+                      onClick={() => {
+                          const cleanText = feedbackText.trim();
+                          const uniqueChars = new Set(cleanText.replace(/\s/g, '').toLowerCase()).size;
+                          const hasRepeating = /(.)\1{4,}/.test(cleanText);
+                          if (cleanText.length >= 20 && uniqueChars >= 5 && !hasRepeating) {
+                              audio.play('jackpot');
+                              if (!hasSubmittedFeedback) {
+                                  setBitcoins(prev => prev + 5);
+                                  setHasSubmittedFeedback(true);
+                                  addToast('Dziękujemy za opinię! Otrzymujesz 5 DarkCoinów!', 'gold');
+                              } else {
+                                  addToast('Dziękujemy za opinię!', 'gold');
+                              }
+                              setFeedbackText('');
+                              setActiveModal(null);
+                          } else {
+                              addToast('Opinia musi mieć min. 20 znaków i mieć sens (bez spamu).', 'error');
+                          }
+                      }}
+                      className="w-full py-3 bg-blue-600/20 text-blue-400 border border-blue-500/50 rounded-lg font-bold hover:bg-blue-500/30 active:scale-95 transition-all flex items-center justify-center gap-2"
+                  >
+                      <Send className="w-4 h-4" /> WYŚLIJ {hasSubmittedFeedback ? '' : ' (+5 DARKCOINÓW)'}
+                  </button>
               </div>
            </div>
         </div>
@@ -2625,15 +2717,19 @@ function GameApp() {
                       <p>Ponieważ aplikacja nie gromadzi danych na zewnątrz, żadne informacje o użytkownikach nie są udostępniane, sprzedawane ani przekazywane podmiotom trzecim (w tym firmom analitycznym czy sieciom reklamowym).</p>
                   </div>
                   <div>
-                      <h3 className="font-bold text-emerald-400 mb-1">5. Zarządzanie Danymi</h3>
+                      <h3 className="font-bold text-emerald-400 mb-1">5. Zbieranie Opinii i Analityka (Opcjonalne)</h3>
+                      <p>W ramach funkcji zbierania opinii (feedbacku), aplikacja może przesyłać na zewnętrzne serwery w celu poprawy jakości rozgrywki wyłącznie dobrowolnie podany, anonimowy tekst. Do opinii nie są dołączane żadne identyfikatory osobiste, lokalizacja ani adres e-mail. Aplikacja może także korzystać z zewnętrznych usług analitycznych (Third-party analytics) zbierających zanonimizowane dane diagnostyczne.</p>
+                  </div>
+                  <div>
+                      <h3 className="font-bold text-emerald-400 mb-1">6. Zarządzanie Danymi</h3>
                       <p>Pełna kontrola nad danymi pozostaje w rękach użytkownika. Z racji tego, że zapis gry jest w 100% lokalny, odinstalowanie aplikacji lub ręczne wyczyszczenie jej danych z poziomu ustawień urządzenia spowoduje nieodwracalne usunięcie całego zapisanego postępu.</p>
                   </div>
                   <div>
-                      <h3 className="font-bold text-emerald-400 mb-1">6. Zmiany w Polityce Prywatności</h3>
+                      <h3 className="font-bold text-emerald-400 mb-1">7. Zmiany w Polityce Prywatności</h3>
                       <p>Wszelkie ewentualne zmiany w niniejszej Polityce Prywatności będą publikowane bezpośrednio na tej stronie.</p>
                   </div>
                   <div>
-                      <h3 className="font-bold text-emerald-400 mb-1">7. Kontakt</h3>
+                      <h3 className="font-bold text-emerald-400 mb-1">8. Kontakt</h3>
                       <p>W razie jakichkolwiek pytań dotyczących niniejszej Polityki Prywatności, prosimy o kontakt pod adresem e-mail: <a href="mailto:ferraeter@gmail.com" className="text-emerald-400 underline hover:text-emerald-300">ferraeter@gmail.com</a>.</p>
                   </div>
               </div>
@@ -2784,7 +2880,12 @@ function GameApp() {
           <Terminal className="w-5 h-5 mb-1" />
           <span className="text-[9px] font-bold uppercase tracking-wider">Terminal</span>
         </button>
-        <button onClick={() => { setActiveModal('market'); setShowLeaderboard(false); }} className={`flex flex-col items-center w-[18%] transition-colors ${activeModal === 'market' ? 'text-emerald-400 drop-shadow-[0_0_5px_rgba(52,211,153,0.8)]' : 'text-emerald-700 hover:text-emerald-500'}`}>
+        <button onClick={() => { setActiveModal('market'); setShowLeaderboard(false); }} className={`relative flex flex-col items-center w-[18%] transition-colors ${activeModal === 'market' ? 'text-emerald-400 drop-shadow-[0_0_5px_rgba(52,211,153,0.8)]' : 'text-emerald-700 hover:text-emerald-500'}`}>
+          {tutorialStep === 4 && (
+             <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-4 z-[200]">
+                 <TutorialTooltip arrow="down">Otwórz Market!</TutorialTooltip>
+             </div>
+          )}
           <ShoppingCart className="w-5 h-5 mb-1" />
           <span className="text-[9px] font-bold uppercase tracking-wider">Market</span>
         </button>
@@ -2925,9 +3026,16 @@ function GameApp() {
       {/* Grid Container */}
       <div className="flex items-center justify-center relative z-10 mb-1 w-full max-w-lg flex-1 min-h-0 min-w-0">
         <div 
-          className="grid grid-cols-4 gap-1 sm:gap-1.5 p-1.5 sm:p-2 border border-emerald-500/20 rounded-2xl bg-black/40 backdrop-blur-md shadow-[0_0_20px_rgba(0,0,0,0.5)] mx-auto min-h-0 min-w-0"
+          className="grid grid-cols-4 gap-1 sm:gap-1.5 p-1.5 sm:p-2 border border-emerald-500/20 rounded-2xl bg-black/40 backdrop-blur-md shadow-[0_0_20px_rgba(0,0,0,0.5)] mx-auto min-h-0 min-w-0 relative"
           style={{ height: '100%', maxHeight: '400px', maxWidth: '100%', aspectRatio: '1/1' }}
         >
+          {tutorialStep === 3 && (
+            <div className="absolute -top-4 left-1/2 -translate-x-1/2 -translate-y-full z-[200]">
+                <TutorialTooltip arrow="down">
+                    Połącz dwa skrypty poziomu 1! (Złap i upuść jeden na drugi)
+                </TutorialTooltip>
+            </div>
+          )}
           {grid.map((slot, index) => {
             const isMerged = mergedAnim?.index === index;
             const mergeType = isMerged ? mergedAnim.type : null;
@@ -2995,6 +3103,12 @@ function GameApp() {
       )}
 
       {/* Attack Button */}
+      <div className="relative w-full max-w-lg mb-0.5 flex-shrink-0">
+        {tutorialStep === 0 && (
+            <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 z-[200]">
+                <TutorialTooltip arrow="down">Kliknij terminal, by wykopać Bity!</TutorialTooltip>
+            </div>
+        )}
       <button
         id="manual-attack-btn"
         onPointerDown={handleManualAttackMouse}
@@ -3005,9 +3119,7 @@ function GameApp() {
         }`}
       >
         <Zap className="w-5 h-5 sm:w-6 sm:h-6" /> [ MANUALNY ATAK ] (+{formatNum(finalClickPower)})
-      </button>
-
-      {/* Overclock Shortcut */}
+      </button>\n      </div>\n      {/* Overclock Shortcut */}
       {overclockEndTime <= Date.now() && seasonScripts >= 50 && (
           <button
               onClick={() => {
@@ -3024,6 +3136,14 @@ function GameApp() {
 
       {/* Footer / Buy Script */}
       <div className="w-full max-w-lg flex flex-col items-center flex-shrink-0 relative z-10 mt-auto">
+        <div className="relative w-full">
+            {(tutorialStep === 1 || tutorialStep === 2) && (
+                <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 z-[200]">
+                    <TutorialTooltip arrow="down">
+                        {tutorialStep === 1 ? "Kup pierwszy Złośliwy Skrypt!" : "Kup drugi taki sam Skrypt!"}
+                    </TutorialTooltip>
+                </div>
+            )}
         <button
           onClick={handleBuy}
           disabled={!canBuy}
@@ -3036,6 +3156,7 @@ function GameApp() {
         >
           Kompiluj Skrypt ({formatNum(scriptCost)})
         </button>
+        </div>
         
         <div className="h-3 flex items-center justify-between w-full px-2">
           <div className="flex-1"></div>
