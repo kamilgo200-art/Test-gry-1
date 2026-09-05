@@ -1,5 +1,7 @@
 import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import { PlayerProgress } from "./PlayerProgress";
+import { CosmicOrbitalModal, CosmicSlot } from "./components/CosmicOrbitalModal";
+import { TutorialModal } from "./components/TutorialModal";
 
 import { Preferences } from '@capacitor/preferences';
 
@@ -48,6 +50,10 @@ import {
   Bitcoin,
   MessageSquare,
   Send,
+  Rocket,
+  Atom,
+  HelpCircle,
+  Radio,
 } from 'lucide-react';
 
 type Item = {
@@ -492,8 +498,20 @@ function GameApp() {
   const [notationState, setNotationState] = useState(globalNotation);
   const [coins, setCoins] = useState<number>(() => getInitialState('coins', 0));
   const [bitcoins, setBitcoins] = useState<number>(() => getInitialState('bitcoins', 0));
+  const [qubits, setQubits] = useState<number>(() => getInitialState('qubits', 0));
+  const [orbitalWarpLevel, setOrbitalWarpLevel] = useState<number>(() => getInitialState('orbitalWarpLevel', 0));
+  const [cosmicUpgrades, setCosmicUpgrades] = useState<Record<string, number>>(() => getInitialState('cosmicUpgrades', {
+    quantumFlux: 0,
+    subspaceThruster: 0,
+    tachyonSiphon: 0,
+    singularityCore: 0
+  }));
+  const [cosmicGrid, setCosmicGrid] = useState<CosmicSlot[]>(() => {
+    const saved = getInitialState<CosmicSlot[]>('cosmicGrid', Array(16).fill(null));
+    return Array.isArray(saved) && saved.length === 16 ? saved : Array(16).fill(null);
+  });
   const [premiumAutoclickers, setPremiumAutoclickers] = useState<number>(() => getInitialState('premiumAutoclickers', 0));
-  const [flyingVirus, setFlyingVirus] = useState<{id: number, top: number, duration: number, type: 'data' | 'btc'} | null>(null);
+  const [flyingVirus, setFlyingVirus] = useState<{id: number, top: number, duration: number, type: 'data' | 'btc' | 'quantum' | 'glitch'} | null>(null);
   const [scriptCost, setScriptCost] = useState<number>(() => getInitialState('scriptCost', 40));
   const [grid, setGrid] = useState<GridSlot[]>(() => getInitialState('grid', Array(16).fill(null)));
   const [upgrades, setUpgrades] = useState(() => getInitialState('upgrades', {
@@ -509,6 +527,7 @@ function GameApp() {
   const [hasUsedFreeDrop, setHasUsedFreeDrop] = useState<boolean>(() => getInitialState('hasUsedFreeDrop', false));
   const [hasSubmittedFeedback, setHasSubmittedFeedback] = useState<boolean>(() => getInitialState('hasSubmittedFeedback', false));
   const [tutorialStep, setTutorialStep] = useState<number>(() => getInitialState('tutorialStep', 0));
+  const [isTutorialOpen, setIsTutorialOpen] = useState<boolean>(false);
   const [feedbackText, setFeedbackText] = useState('');
   
   // STATS
@@ -562,7 +581,7 @@ function GameApp() {
   const [verifyingContracts, setVerifyingContracts] = useState<string[]>([]);
   const [hackerEvent, setHackerEvent] = useState<{name: string, isOpen: boolean, isHacking: boolean} | null>(null);
   
-  const [activeModal, setActiveModal] = useState<'market' | 'casino' | 'siatka' | 'settings' | 'privacy' | 'feedback' | null>(null);
+  const [activeModal, setActiveModal] = useState<'market' | 'casino' | 'siatka' | 'settings' | 'privacy' | 'feedback' | 'cosmic' | 'tutorial' | null>(null);
   const [showLeaderboard, setShowLeaderboard] = useState(false);
   const [offlineEarnings, setOfflineEarnings] = useState<{seconds: number, amount: number} | null>(null);
 
@@ -621,6 +640,13 @@ function GameApp() {
      else if (tutorialStep === 3 && grid.some(s => s !== null && s.level >= 2)) setTutorialStep(4);
      else if (tutorialStep === 4 && activeModal === 'market') setTutorialStep(5);
   }, [tutorialStep, coins, scriptCost, grid, activeModal]);
+
+  useEffect(() => {
+    // Open full tutorial modal on first run
+    if (stats.totalClicks === 0 && stats.lifetimeBits === 0 && tutorialStep === 0) {
+      setIsTutorialOpen(true);
+    }
+  }, []);
 
   // FRUSTRATION & PITY
   const [frustrationIndex, setFrustrationIndex] = useState(0);
@@ -764,17 +790,20 @@ function GameApp() {
   const darkWebSyndicateMax = (upgrades.darkWebSyndicate || 0) >= 50 ? 2 : 1;
   
   const bitcoinBonus = (bitcoins || 0) * 0.05;
-  const passiveIncomeMultiplier = 1 
+  const qubitBonus = (qubits || 0) * 0.02; // +2% per Qubit
+  const cosmicPassiveMultiplier = 1 + (cosmicUpgrades.quantumFlux || 0) * 0.5 + (orbitalWarpLevel * 1.5);
+  const passiveIncomeMultiplier = (1 
     + (upgrades.cryptoMiner * 1 * cryptoMinerMax) 
     + (upgrades.trollFarm * 4 * trollFarmMax)
     + ((upgrades.aiBotnet || 0) * 10 * aiBotnetMax)
     + ((upgrades.quantumDecryptor || 0) * 25 * quantumDecryptorMax)
     + ((upgrades.darkWebSyndicate || 0) * 100 * darkWebSyndicateMax)
     + ((upgrades.cyberDysonSphere || 0) * 500)
-    + bitcoinBonus;
+    + bitcoinBonus
+    + qubitBonus) * cosmicPassiveMultiplier;
   const basePassiveIncome = gridIncome * passiveIncomeMultiplier;
   
-  const baseClickPower = 1 + Math.floor(0.01 * basePassiveIncome) + (upgrades.clickVirus * 5 * clickVirusMax);
+  const baseClickPower = (1 + Math.floor(0.01 * basePassiveIncome) + (upgrades.clickVirus * 5 * clickVirusMax)) * (1 + (cosmicUpgrades.tachyonSiphon || 0) * 0.25);
   const autoClickerIncome = upgrades.autoClicker * Math.max(1, Math.floor(0.1 * baseClickPower)) * autoClickerMax;
   
   const baseTotalIncome = basePassiveIncome + autoClickerIncome;
@@ -801,13 +830,13 @@ function GameApp() {
     }
     
     const stateStr = JSON.stringify({
-      coins, scriptCost, grid, upgrades, hasUsedFreeDrop, stats, lastLoginDate, totalDaysLogged, lastSaveTime: Date.now(), lastTotalIncome: finalTotalIncome, completedContracts, lastPityDropTime, isPremium, isShadowbanned, encryptedWallet, seasonScripts, hasBattlePass, unlockedNodes, overclockEndTime, isZeroDayActive, zeroDayTimeLeft, zeroDayKeys, zeroDayArtifacts, bitcoins, premiumAutoclickers, hasSubmittedFeedback, tutorialStep
+      coins, scriptCost, grid, upgrades, hasUsedFreeDrop, stats, lastLoginDate, totalDaysLogged, lastSaveTime: Date.now(), lastTotalIncome: finalTotalIncome, completedContracts, lastPityDropTime, isPremium, isShadowbanned, encryptedWallet, seasonScripts, hasBattlePass, unlockedNodes, overclockEndTime, isZeroDayActive, zeroDayTimeLeft, zeroDayKeys, zeroDayArtifacts, bitcoins, premiumAutoclickers, hasSubmittedFeedback, tutorialStep, qubits, orbitalWarpLevel, cosmicUpgrades, cosmicGrid
     });
     localStorage.setItem('hackerMergeState', stateStr);
     Preferences.set({ key: 'hackerMergeState', value: stateStr }).catch(() => {});
     const t = setTimeout(() => setIsSaving(false), 800);
     return () => clearTimeout(t);
-  }, [coins, scriptCost, grid, upgrades, hasUsedFreeDrop, stats, lastLoginDate, totalDaysLogged, finalTotalIncome, completedContracts, lastPityDropTime, isPremium, isShadowbanned, encryptedWallet, seasonScripts, hasBattlePass, unlockedNodes, overclockEndTime, isZeroDayActive, zeroDayTimeLeft, zeroDayKeys, zeroDayArtifacts, bitcoins, premiumAutoclickers, hasSubmittedFeedback, tutorialStep]);
+  }, [coins, scriptCost, grid, upgrades, hasUsedFreeDrop, stats, lastLoginDate, totalDaysLogged, finalTotalIncome, completedContracts, lastPityDropTime, isPremium, isShadowbanned, encryptedWallet, seasonScripts, hasBattlePass, unlockedNodes, overclockEndTime, isZeroDayActive, zeroDayTimeLeft, zeroDayKeys, zeroDayArtifacts, bitcoins, premiumAutoclickers, hasSubmittedFeedback, tutorialStep, qubits, orbitalWarpLevel, cosmicUpgrades, cosmicGrid]);
 
   useEffect(() => {
     try {
@@ -1098,6 +1127,16 @@ function GameApp() {
                 }
             }
 
+            // Cosmic Probes Qubit Generation
+            const cosmicIncomeRate = cosmicGrid.reduce((acc, probe) => {
+              if (!probe) return acc;
+              return acc + Math.pow(3, probe.level - 1) * 0.1;
+            }, 0) * (1 + (cosmicUpgrades.subspaceThruster || 0) * 0.25) * (1 + orbitalWarpLevel * 0.5);
+
+            if (cosmicIncomeRate > 0) {
+              setQubits(prev => prev + cosmicIncomeRate * secondsPassed);
+            }
+
             setZeroDayTimeLeft(prev => {
                 if (prev > 0) {
                     const next = Math.max(0, prev - secondsPassed);
@@ -1148,15 +1187,24 @@ function GameApp() {
   useEffect(() => {
     let timeout: NodeJS.Timeout;
     const scheduleNext = () => {
-        const delay = 45000 + Math.random() * 45000;
+        const delay = 35000 + Math.random() * 35000;
         timeout = setTimeout(() => {
-            const isBtc = Math.random() < 0.2;
+            const rand = Math.random();
+            let vType: 'data' | 'btc' | 'quantum' | 'glitch' = 'data';
+            if (rand < 0.15) {
+                vType = 'btc';
+            } else if (rand < 0.35) {
+                vType = 'quantum';
+            } else if (rand < 0.45) {
+                vType = 'glitch';
+            }
+
             const id = Date.now();
             setFlyingVirus({
                 id,
                 top: 20 + Math.random() * 60,
-                duration: 6 + Math.random() * 4,
-                type: isBtc ? 'btc' : 'data'
+                duration: 5 + Math.random() * 4,
+                type: vType
             });
             
             setTimeout(() => {
@@ -1177,7 +1225,16 @@ function GameApp() {
     
     if (flyingVirus.type === 'btc') {
         setBitcoins(prev => prev + 1);
-        addToast("Złapano Wirusa: +1 DARKCOIN!", "gold");
+        addToast("Złapano Wirusa BTC: +1 DARKCOIN!", "gold");
+    } else if (flyingVirus.type === 'quantum') {
+        const qReward = Math.max(5, Math.floor((stats.quantumCores + 1) * 2 + Math.random() * 5));
+        setQubits(prev => prev + qReward);
+        addToast(`Złapano Wirusa Kwantowego: +${qReward} Qubitów!`, "gold");
+    } else if (flyingVirus.type === 'glitch') {
+        const glitchReward = finalTotalIncome * 300 + 5000;
+        setCoins(prev => prev + glitchReward);
+        triggerShake('extreme', 500);
+        addToast(`Wirus Glitch zhakowany: +${formatNum(glitchReward)} B!`, "critical");
     } else {
         const reward = (finalTotalIncome * 120) + 1000;
         setCoins(prev => prev + reward);
@@ -1539,6 +1596,105 @@ function GameApp() {
     setRootMessage("Czuję... moc... Zaczynamy od nowa.");
   };
 
+  // COSMIC HANDLERS
+  const handleMergeCosmic = (fromIndex: number, toIndex: number) => {
+    const fromItem = cosmicGrid[fromIndex];
+    const toItem = cosmicGrid[toIndex];
+    if (!fromItem || !toItem) return;
+    if (fromItem.level !== toItem.level) return;
+
+    vibrate(60);
+    audio.play('merge');
+    triggerShake('heavy', 200);
+
+    const nextLevel = fromItem.level + 1;
+    const newGrid = [...cosmicGrid];
+    newGrid[fromIndex] = null;
+    newGrid[toIndex] = {
+      id: Math.random().toString(36).slice(2, 9),
+      level: nextLevel
+    };
+    setCosmicGrid(newGrid);
+
+    const bonusQubits = Math.pow(2, nextLevel) * 5;
+    setQubits(q => q + bonusQubits);
+    addToast(`Fuzja Sondy Poz. ${nextLevel}! +${bonusQubits} Qubitów!`, "gold");
+  };
+
+  const handleBuyCosmicProbe = () => {
+    const emptyIndex = cosmicGrid.findIndex(s => s === null);
+    if (emptyIndex === -1) {
+      addToast("Brak wolnego slotu na siatce kosmicznej!", "error");
+      return;
+    }
+    const currentProbes = cosmicGrid.filter(s => s !== null).length;
+    const probeCost = Math.floor(10 * Math.pow(1.5, currentProbes));
+    if (qubits < probeCost) {
+      addToast(`Brak Qubitów (wymagane ${probeCost} Q)!`, "error");
+      return;
+    }
+
+    audio.play('click');
+    setQubits(q => q - probeCost);
+    const newGrid = [...cosmicGrid];
+    newGrid[emptyIndex] = {
+      id: Math.random().toString(36).slice(2, 9),
+      level: 1
+    };
+    setCosmicGrid(newGrid);
+    addToast("Sonda Orbitalna Mk.I wysłana na orbitę!", "normal");
+  };
+
+  const handleCosmicCollapsePrestige = () => {
+    if (coins < 100000000) {
+      addToast("Wymagane min. 100M Bitów na Ziemi do wywołania kolapsu!", "error");
+      return;
+    }
+    vibrate([100, 50, 200, 50, 400]);
+    triggerShake('extreme', 2500);
+    audio.play('jackpot');
+
+    const gain = Math.floor(Math.pow(coins / 1000000, 0.6) * 10);
+    setOrbitalWarpLevel(w => w + 1);
+    setQubits(q => q + gain);
+    setCoins(0);
+    addToast(`KOLAPS ORBITALNY DOKONANY! +${gain} Qubitów i +1 Poziom Warp!`, "gold");
+    setRootMessage("Czasoprzestrzeń zagięta. Zasilanie kwantowe zwielokrotnione.");
+  };
+
+  const handleUpgradeCosmic = (type: 'warp' | 'overdrive' | 'stargate') => {
+    let cost = 50;
+    if (type === 'warp') {
+      cost = Math.floor(50 * Math.pow(1.8, orbitalWarpLevel));
+      if (qubits < cost) {
+        addToast(`Za mało Qubitów (wymagane ${cost} Q)!`, "error");
+        return;
+      }
+      setQubits(q => q - cost);
+      setOrbitalWarpLevel(w => w + 1);
+    } else if (type === 'overdrive') {
+      const currentLvl = cosmicUpgrades.quantumFlux || 0;
+      cost = Math.floor(30 * Math.pow(1.6, currentLvl));
+      if (qubits < cost) {
+        addToast(`Za mało Qubitów (wymagane ${cost} Q)!`, "error");
+        return;
+      }
+      setQubits(q => q - cost);
+      setCosmicUpgrades(prev => ({ ...prev, quantumFlux: (prev.quantumFlux || 0) + 1 }));
+    } else if (type === 'stargate') {
+      const currentLvl = cosmicUpgrades.singularityCore || 0;
+      cost = Math.floor(100 * Math.pow(2.0, currentLvl));
+      if (qubits < cost) {
+        addToast(`Za mało Qubitów (wymagane ${cost} Q)!`, "error");
+        return;
+      }
+      setQubits(q => q - cost);
+      setCosmicUpgrades(prev => ({ ...prev, singularityCore: (prev.singularityCore || 0) + 1 }));
+    }
+    audio.play('click');
+    addToast("Technologia orbitalna ulepszona!", "gold");
+  };
+
   const hasEmptySlot = grid.some(slot => slot === null);
   const canBuy = coins >= scriptCost && hasEmptySlot;
   const isCasinoDisabled = casinoRolling || casinoCooldown > 0;
@@ -1636,6 +1792,10 @@ function GameApp() {
               className={`fixed z-[100] p-3 sm:p-4 rounded-full animate-fly-across backdrop-blur-md border touch-none cursor-pointer ${
                   flyingVirus.type === 'btc' 
                   ? 'text-orange-400 border-orange-500 bg-orange-900/60 shadow-[0_0_30px_rgba(249,115,22,0.8)]' 
+                  : flyingVirus.type === 'quantum'
+                  ? 'text-cyan-400 border-cyan-400 bg-cyan-950/70 shadow-[0_0_35px_rgba(6,182,212,0.9)] animate-pulse'
+                  : flyingVirus.type === 'glitch'
+                  ? 'text-fuchsia-400 border-fuchsia-500 bg-fuchsia-950/70 shadow-[0_0_40px_rgba(217,70,239,0.9)]'
                   : 'text-red-400 border-red-500 bg-red-900/60 shadow-[0_0_30px_rgba(239,68,68,0.8)]'
               }`}
               style={{
@@ -1643,7 +1803,15 @@ function GameApp() {
                   animationDuration: `${flyingVirus.duration}s`,
               }}
           >
-              {flyingVirus.type === 'btc' ? <Bitcoin className="w-8 h-8 sm:w-12 sm:h-12 animate-spin-slow" /> : <Bug className="w-8 h-8 sm:w-12 sm:h-12 animate-bounce" />}
+              {flyingVirus.type === 'btc' ? (
+                  <Bitcoin className="w-8 h-8 sm:w-12 sm:h-12 animate-spin-slow" />
+              ) : flyingVirus.type === 'quantum' ? (
+                  <Atom className="w-8 h-8 sm:w-12 sm:h-12 animate-[spin_3s_linear_infinite]" />
+              ) : flyingVirus.type === 'glitch' ? (
+                  <Skull className="w-8 h-8 sm:w-12 sm:h-12 animate-ping" />
+              ) : (
+                  <Bug className="w-8 h-8 sm:w-12 sm:h-12 animate-bounce" />
+              )}
           </button>
       )}
       <div className="pointer-events-none absolute inset-0 bg-[linear-gradient(rgba(18,16,16,0)_50%,rgba(0,0,0,0.25)_50%),linear-gradient(90deg,rgba(255,0,0,0.06),rgba(0,255,0,0.02),rgba(0,0,255,0.06))] bg-[length:100%_4px,3px_100%] z-0 opacity-40"></div>
@@ -2692,6 +2860,41 @@ function GameApp() {
         </div>
       )}
 
+      {/* Cosmic Orbital Modal */}
+      <CosmicOrbitalModal
+        isOpen={activeModal === 'cosmic'}
+        onClose={() => setActiveModal(null)}
+        coins={coins}
+        qubits={qubits}
+        lifetimeQubits={qubits}
+        cosmicGrid={cosmicGrid}
+        orbitalWarpLevel={orbitalWarpLevel}
+        qubitOverdriveLevel={cosmicUpgrades.quantumFlux || 0}
+        stargateLevel={cosmicUpgrades.singularityCore || 0}
+        onBuyCosmicProbe={handleBuyCosmicProbe}
+        probeCost={Math.floor(10 * Math.pow(1.5, cosmicGrid.filter(s => s !== null).length))}
+        onMergeCosmic={handleMergeCosmic}
+        onBuyUpgrade={handleUpgradeCosmic}
+        onCosmicCollapsePrestige={handleCosmicCollapsePrestige}
+        qubitPrestigeGain={Math.floor(Math.pow(coins / 1000000, 0.6) * 10)}
+        formatNum={formatNum}
+      />
+
+      {/* Interactive Tutorial Modal */}
+      <TutorialModal
+        isOpen={isTutorialOpen || activeModal === 'tutorial'}
+        onClose={() => {
+          setIsTutorialOpen(false);
+          if (activeModal === 'tutorial') setActiveModal(null);
+        }}
+        tutorialStep={tutorialStep}
+        onRestartTutorial={() => {
+          setTutorialStep(0);
+          setIsTutorialOpen(true);
+          setActiveModal(null);
+        }}
+      />
+
       {/* Privacy Policy Modal */}
       {activeModal === 'privacy' && (
         <div className="fixed inset-0 z-[50] bg-slate-950/95 flex flex-col items-center justify-center p-4 pb-24 overflow-y-auto w-full" onClick={(e) => { if (e.target === e.currentTarget) setActiveModal(null) }}>
@@ -2876,11 +3079,11 @@ function GameApp() {
 
       {/* Bottom Nav Bar */}
       <div className="fixed bottom-0 left-0 w-full h-[64px] z-[45] bg-black/90 border-t border-emerald-500/50 flex justify-around items-center px-1 pb-safe backdrop-blur-md">
-        <button onClick={() => { setActiveModal(null); setShowLeaderboard(false); }} className={`flex flex-col items-center w-[18%] transition-colors ${activeModal === null && !showLeaderboard ? 'text-emerald-400 drop-shadow-[0_0_5px_rgba(52,211,153,0.8)]' : 'text-emerald-700 hover:text-emerald-500'}`}>
+        <button onClick={() => { setActiveModal(null); setShowLeaderboard(false); }} className={`flex flex-col items-center w-[16%] transition-colors ${activeModal === null && !showLeaderboard ? 'text-emerald-400 drop-shadow-[0_0_5px_rgba(52,211,153,0.8)]' : 'text-emerald-700 hover:text-emerald-500'}`}>
           <Terminal className="w-5 h-5 mb-1" />
           <span className="text-[9px] font-bold uppercase tracking-wider">Terminal</span>
         </button>
-        <button onClick={() => { setActiveModal('market'); setShowLeaderboard(false); }} className={`relative flex flex-col items-center w-[18%] transition-colors ${activeModal === 'market' ? 'text-emerald-400 drop-shadow-[0_0_5px_rgba(52,211,153,0.8)]' : 'text-emerald-700 hover:text-emerald-500'}`}>
+        <button onClick={() => { setActiveModal('market'); setShowLeaderboard(false); }} className={`relative flex flex-col items-center w-[16%] transition-colors ${activeModal === 'market' ? 'text-emerald-400 drop-shadow-[0_0_5px_rgba(52,211,153,0.8)]' : 'text-emerald-700 hover:text-emerald-500'}`}>
           {tutorialStep === 4 && (
              <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-4 z-[200]">
                  <TutorialTooltip arrow="down">Otwórz Market!</TutorialTooltip>
@@ -2889,15 +3092,19 @@ function GameApp() {
           <ShoppingCart className="w-5 h-5 mb-1" />
           <span className="text-[9px] font-bold uppercase tracking-wider">Market</span>
         </button>
-        <button onClick={() => { setActiveModal('casino'); setShowLeaderboard(false); }} className={`flex flex-col items-center w-[18%] transition-colors ${activeModal === 'casino' ? 'text-emerald-400 drop-shadow-[0_0_5px_rgba(52,211,153,0.8)]' : 'text-emerald-700 hover:text-emerald-500'}`}>
+        <button onClick={() => { setActiveModal('cosmic'); setShowLeaderboard(false); }} className={`relative flex flex-col items-center w-[16%] transition-colors ${activeModal === 'cosmic' ? 'text-cyan-300 drop-shadow-[0_0_8px_rgba(6,182,212,0.9)]' : 'text-cyan-700 hover:text-cyan-400'}`}>
+          <Rocket className="w-5 h-5 mb-1 animate-pulse" />
+          <span className="text-[9px] font-bold uppercase tracking-wider">Kosmos</span>
+        </button>
+        <button onClick={() => { setActiveModal('casino'); setShowLeaderboard(false); }} className={`flex flex-col items-center w-[16%] transition-colors ${activeModal === 'casino' ? 'text-emerald-400 drop-shadow-[0_0_5px_rgba(52,211,153,0.8)]' : 'text-emerald-700 hover:text-emerald-500'}`}>
           <Dices className="w-5 h-5 mb-1" />
           <span className="text-[9px] font-bold uppercase tracking-wider">Kasyno</span>
         </button>
-        <button onClick={() => { setActiveModal('siatka'); setShowLeaderboard(false); }} className={`flex flex-col items-center w-[18%] transition-colors ${activeModal === 'siatka' ? 'text-emerald-400 drop-shadow-[0_0_5px_rgba(52,211,153,0.8)]' : 'text-emerald-700 hover:text-emerald-500'}`}>
+        <button onClick={() => { setActiveModal('siatka'); setShowLeaderboard(false); }} className={`flex flex-col items-center w-[16%] transition-colors ${activeModal === 'siatka' ? 'text-emerald-400 drop-shadow-[0_0_5px_rgba(52,211,153,0.8)]' : 'text-emerald-700 hover:text-emerald-500'}`}>
           <Globe className="w-5 h-5 mb-1" />
           <span className="text-[9px] font-bold uppercase tracking-wider">Siatka</span>
         </button>
-        <button onClick={() => { setShowLeaderboard(true); setActiveModal(null); }} className={`flex flex-col items-center w-[18%] transition-colors ${showLeaderboard ? 'text-emerald-400 drop-shadow-[0_0_5px_rgba(52,211,153,0.8)]' : 'text-emerald-700 hover:text-emerald-500'}`}>
+        <button onClick={() => { setShowLeaderboard(true); setActiveModal(null); }} className={`flex flex-col items-center w-[16%] transition-colors ${showLeaderboard ? 'text-emerald-400 drop-shadow-[0_0_5px_rgba(52,211,153,0.8)]' : 'text-emerald-700 hover:text-emerald-500'}`}>
           <Trophy className="w-5 h-5 mb-1" />
           <span className="text-[9px] font-bold uppercase tracking-wider">Ranking</span>
         </button>
@@ -2938,8 +3145,11 @@ function GameApp() {
             <button onClick={() => setIsMuted(m => !m)} className="text-emerald-500 hover:text-emerald-400 transition-colors p-1 rounded hover:bg-emerald-900/30">
               {isMuted ? <VolumeX className="w-4 h-4 sm:w-5 sm:h-5" /> : <Volume2 className="w-4 h-4 sm:w-5 sm:h-5" />}
             </button>
-            <button onClick={() => setActiveModal('settings')} className="text-emerald-500 hover:text-emerald-400 transition-colors p-1 rounded hover:bg-emerald-900/30">
+            <button onClick={() => setActiveModal('settings')} className="text-emerald-500 hover:text-emerald-400 transition-colors p-1 rounded hover:bg-emerald-900/30" title="Ustawienia">
               <Settings className="w-4 h-4 sm:w-5 sm:h-5" />
+            </button>
+            <button onClick={() => setIsTutorialOpen(true)} className="text-cyan-400 hover:text-cyan-300 transition-colors p-1 rounded hover:bg-cyan-900/30" title="Samouczek">
+              <HelpCircle className="w-4 h-4 sm:w-5 sm:h-5" />
             </button>
             {dropTimer === 0 ? (
                <button 
@@ -2983,6 +3193,17 @@ function GameApp() {
                        <span className="font-bold block mb-1">DarkCoins (Premium)</span>
                        Każdy coin zwiększa pasywne kopanie oraz kliknięcie o stałe +5%.
                        Obecny bonus: +{(bitcoins * 5).toFixed(0)}%
+                   </div>
+                </div>
+             )}
+             {qubits > 0 && (
+                <div className="font-bold flex items-center gap-1 group relative cursor-help">
+                   <Atom className="w-3.5 h-3.5 text-cyan-400 animate-spin-slow" />
+                   <span className="text-cyan-400">{formatNum(Math.floor(qubits))} Q</span>
+                   <div className="absolute top-full left-0 mt-1 w-48 p-2 bg-black/90 border border-cyan-500/50 rounded-lg text-[10px] text-cyan-300 opacity-0 pointer-events-none group-hover:opacity-100 transition-opacity z-50">
+                       <span className="font-bold block mb-1">Qubity Kwantowe</span>
+                       Waluta trybu kosmicznego! Każdy Qubit daje +2% do wydobycia.
+                       Warp Orbitalny: Poz. {orbitalWarpLevel}
                    </div>
                 </div>
              )}
