@@ -49,7 +49,7 @@ jobs:
 
       # Automatyczne podpisanie kluczem Keystore (jeśli dodano sekrety w GitHubie)
       - name: Sign Android Release AAB
-        if: ${{ secrets.SIGNING_KEY != '' }}
+        if: env.SIGNING_KEY != ''
         env:
           SIGNING_KEY: ${{ secrets.SIGNING_KEY }}
           KEY_ALIAS: ${{ secrets.KEY_ALIAS }}
